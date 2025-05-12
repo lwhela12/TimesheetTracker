@@ -1,0 +1,136 @@
+# Timesheet & Payroll Manager – Design Document
+
+## 1. Purpose & Scope
+
+The objective is to replace a brittle 100‑tab Excel workbook with a modern web application that:
+
+* **Captures** employee punches, mileage, and expenses in a central database.
+* **Calculates** regular pay, overtime (1.5× beyond 40 hr/wk or custom rule), and mileage reimbursement (currently \$0.30/mi).
+* **Surfaces** roll‑up dashboards (weekly payroll total, OT leaders, mileage cost, labour‑cost trend).
+* **Exports** clean CSV/JSON files ready for QuickBooks/ADP—or drives future direct API integration.
+* **Scales** from single‑office, LAN‑only deployment to a multi‑tenant SaaS with minimal re‑work.
+
+## 2. Personas & Roles
+
+| Role                | Core Needs                                                                                | Notes                  |
+| ------------------- | ----------------------------------------------------------------------------------------- | ---------------------- |
+| **Clerk** (primary) | Enter/edit timesheet data; approve mileage; run payroll export.                           | \~2 concurrent users.  |
+| **Supervisor**      | View/adjust punches for their crew; see OT use; sign‑off.                                 | Optional – Phase 2.    |
+| **Employee**        | Clock in/out, record mileage from mobile.                                                 | Phase 3 mobile add‑on. |
+| **Owner / Admin**   | High‑level dashboards; add/remove employees; configure pay & mileage rates; manage users. |                        |
+
+## 3. Functional Requirements
+
+1. **Employee CRUD** – ID, name, base hourly rate, active flag.
+2. **Punch Entry** – Date, Time‑in, Time‑out, Lunch minutes, Miles.
+3. **Auto‑calculation**
+
+   * Regular hours, OT hours (threshold configurable).
+   * Pay = Reg hrs × Rate + OT hrs × Rate × 1.5 + Miles × Rate/mi.
+4. **Weekly & Pay‑Period Views** – filter by employee, status, approval state.
+5. **Approval Workflow** (Phase 2) – Supervisor → Clerk → Payroll.
+6. **Reports**
+
+   * Payroll summary (CSV, PDF).
+   * Overtime leaderboard.
+   * Mileage cost.
+   * Trend charts week‑over‑week.
+7. **User Management** – RBAC: Admin, Clerk, Supervisor, Employee.
+8. **Audit Trail** – who changed what & when.
+9. **Data Export / API**
+
+   * CSV for QuickBooks/ADP now, REST/GraphQL endpoint later.
+10. **Mobile Punch Clock** (Phase 3) – PWA or React‑Native app, offline cache, GPS‑based mileage capture.
+
+## 4. Non‑Functional Requirements
+
+* **Local‑first**: Must run entirely on‑prem via Docker Compose; same container can move to cloud.
+* **Zero licence fees**: OSS stack only.
+* **Concurrency**: ≥10 simultaneous clerk/supervisor sessions.
+* **Security**: HTTPS (self‑signed or Let’s Encrypt), salted+hashed passwords, JWT session tokens.
+* **Back‑ups**: Nightly DB dump + weekly off‑device copy.
+* **Performance**: <300 ms API latency on 2 GB VPS.
+
+## 5. Tech Stack
+
+| Layer         | Choice                           | Rationale                                     |
+| ------------- | -------------------------------- | --------------------------------------------- |
+| **Front‑end** | **React (+ React‑Admin)**        | CRUD scaffolding, reusable with React‑Native. |
+| **Back‑end**  | **FastAPI** (Python 3.12)        | Async, OpenAPI auto‑docs, type hints.         |
+| **ORM**       | **SQLModel**                     | Pydantic + SQLAlchemy blend, async‑ready.     |
+| **DB**        | **PostgreSQL 15**                | Concurrency, extensions (timeseries).         |
+| **Auth**      | **FastAPI Users** + JWT          | RBAC, refresh tokens, social add‑ons later.   |
+| **Charts**    | **Chart.js via react‑chartjs‑2** | Simple, no licence.                           |
+| **Container** | **Docker + Docker Compose**      | Identical local vs cloud deploy.              |
+| **CI/CD**     | **GitHub Actions**               | Lint, test, build, push image.                |
+
+## 6. Data Model (initial)
+
+### Tables
+
+* **employee** (id PK, first\_name, last\_name, rate, active, created\_at)
+* **punch** (id PK, employee\_id FK, date, time\_in, time\_out, lunch\_minutes, miles, created\_by, created\_at)
+* **payroll\_calc** (id PK, punch\_id FK, reg\_hours, ot\_hours, pay, mileage\_pay) – materialized view or stored procedure refresh.
+* **user** (id, email, hashed\_pw, role)
+* **audit\_log** (id, table, row\_id, changed\_by, field, old\_val, new\_val, changed\_at)
+
+### Relationships
+
+* employee 1‑\* punch
+* punch 1‑1 payroll\_calc
+* user (Admin/Clerk) recorded in audit\_log.
+
+## 7. API Endpoints (v1)
+
+| Method         | Path             | Purpose                   |
+| -------------- | ---------------- | ------------------------- |
+| GET            | /employees       | List / filter employees   |
+| POST           | /employees       | Create employee           |
+| GET/PUT/DELETE | /employees/{id}  | CRUD                      |
+| GET            | /punches         | List punches (filters)    |
+| POST           | /punches         | Add punch                 |
+| PUT            | /punches/{id}    | Edit punch                |
+| GET            | /reports/payroll | CSV export for date range |
+| GET            | /reports/ot      | Overtime leaderboard      |
+
+All endpoints protected by JWT; role‑based gates enforced via dependency injection.
+
+## 8. UI Sketches (textual)
+
+* **Dashboard** – metric cards (Total Pay, OT \$, Mileage \$) + bar chart (pay by week) + top‑5 OT list.
+* **Timesheet Grid** – DataGrid with inline edit, column filters, status icons.
+* **Punch Modal** – Employee dropdown, date/time pickers, numeric inputs.
+* **Reports Panel** – date pickers + “Download CSV/PDF” buttons.
+
+## 9. Deployment Strategy
+
+| Option                     | Steps                                                   | Recurring Cost    |
+| -------------------------- | ------------------------------------------------------- | ----------------- |
+| **Local Docker (default)** | Copy `.env` → `docker compose up -d` on office mini‑PC. | \$0 + electricity |
+| **Cloud (Opt‑in)**         | Same image → Fly.io / AWS Lightsail CI deploy.          | \$25–35/mo start  |
+
+Back‑ups: `pg_dump` cron → local NAS; cloud users get managed snapshots.
+
+## 10. Phased Roadmap
+
+| Phase                         | Duration  | Deliverables                                                 |
+| ----------------------------- | --------- | ------------------------------------------------------------ |
+| **0 – Design**                | 1 day     | Finalise this spec, wireframes, sprint plan.                 |
+| **1 – MVP**                   | 1 week    | Employee CRUD, Punch CRUD, reg/OT/mileage calc, payroll CSV. |
+| **2 – Dashboards & Audit**    | 1 week    | Summary widgets, OT leaderboard, audit log UI.               |
+| **3 – Supervisor & Approval** | 1 week    | Role gating, status flow, e‑mail reminders.                  |
+| **4 – Mobile Punch (PWA)**    | 1–2 weeks | Responsive UI, offline cache, GPS miles.                     |
+| **5 – Cloud SaaS Lift**       | 2 days    | CI pipeline, multi‑tenant schema, Stripe billing stub.       |
+
+## 11. Open Questions
+
+1. Confirm OT rule (8 hr/day vs 40 hr/week vs state law?).
+2. Mileage rate—static or variable by pay period?
+3. Payroll export format: QBO IIF, ADP CSV, or custom?
+4. Required retention period / legal compliance (FLSA, state rules)?
+5. Do supervisors need restricted crew‑only views Day 1?
+6. Branding / UI theming preferences?
+
+---
+
+**Next step:** review & annotate this doc; once confirmed we’ll create the repo skeleton and start Phase 0 tasks (schema migration script, Docker baseline, React‑Admin seed).
