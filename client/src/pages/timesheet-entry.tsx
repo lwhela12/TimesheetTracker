@@ -83,12 +83,30 @@ type TimesheetEntry = {
   time_out: string;
   lunch_minutes: number;
   miles: number;
+  pto_hours?: number;
+  holiday_worked_hours?: number;
+  holiday_non_worked_hours?: number;
+  misc_reimbursement?: number;
+  misc_hours?: number;
+  misc_hours_type?: string;
+  notes?: string;
   status: string;
   payroll?: {
     reg_hours: number;
     ot_hours: number;
+    pto_hours?: number;
+    holiday_worked_hours?: number;
+    holiday_non_worked_hours?: number;
+    reg_pay: number;
+    ot_pay: number;
+    pto_pay?: number;
+    holiday_worked_pay?: number;
+    holiday_non_worked_pay?: number;
+    misc_hours_pay?: number;
     pay: number;
     mileage_pay: number;
+    misc_reimbursement?: number;
+    total_pay: number;
   };
 };
 
@@ -272,71 +290,22 @@ export default function TimesheetEntry() {
   };
   
   // Handle weekly timesheet submission
-  const handleWeeklyTimeEntrySubmit = (data: any) => {
-    const { 
-      employee_id, 
-      week_start_date, 
-      total_miles, 
-      total_pto_hours,
-      total_holiday_worked_hours,
-      total_holiday_non_worked_hours,
-      total_misc_reimbursement,
-      total_misc_hours,
-      misc_hours_type,
-      notes 
-    } = data;
-    const entries: Array<{
-      employee_id: number;
-      date: string;
-      time_in: string;
-      time_out: string;
-      lunch_minutes: number;
-      miles: number;
-      pto_hours?: number;
-      holiday_worked_hours?: number;
-      holiday_non_worked_hours?: number;
-      misc_reimbursement?: number;
-      misc_hours?: number;
-      misc_hours_type?: string;
-      notes?: string;
-      status: string;
-    }> = [];
-    
-    // Process each day of the week
-    const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-    days.forEach((day, index) => {
-      const dayData = data[day];
-      
-      // Only create entries for days marked as worked
-      if (dayData.worked) {
-        // Calculate the date for this day of the week
-        const startDate = new Date(week_start_date);
-        const dayDate = new Date(startDate);
-        dayDate.setDate(startDate.getDate() + index);
-        
-        // For the first day of the week, include special hours and reimbursements
-        const isFirstDay = index === 0;
-        entries.push({
-          employee_id,
-          date: formatDate(dayDate),
-          time_in: dayData.time_in,
-          time_out: dayData.time_out,
-          lunch_minutes: dayData.lunch_minutes,
-          miles: index === 0 ? total_miles : 0, // Assign miles to the first day of the week
-          
-          // Include special hours and reimbursements on the first day of the week
-          pto_hours: isFirstDay ? data.total_pto_hours || 0 : 0,
-          holiday_worked_hours: isFirstDay ? data.total_holiday_worked_hours || 0 : 0,
-          holiday_non_worked_hours: isFirstDay ? data.total_holiday_non_worked_hours || 0 : 0,
-          misc_reimbursement: isFirstDay ? data.total_misc_reimbursement || 0 : 0,
-          misc_hours: isFirstDay ? data.total_misc_hours || 0 : 0,
-          misc_hours_type: isFirstDay ? data.misc_hours_type || "" : "",
-          
-          notes: notes,
-          status: "pending"
-        });
-      }
-    });
+  const handleWeeklyTimeEntrySubmit = (entries: Array<{
+    employee_id: number;
+    date: string;
+    time_in: string;
+    time_out: string;
+    lunch_minutes: number;
+    miles: number;
+    pto_hours?: number;
+    holiday_worked_hours?: number;
+    holiday_non_worked_hours?: number;
+    misc_reimbursement?: number;
+    misc_hours?: number;
+    misc_hours_type?: string;
+    notes?: string;
+    status: string;
+  }>) => {
     
     // Submit the batch of entries
     createWeeklyTimeEntriesMutation.mutate({ entries });
@@ -559,10 +528,21 @@ export default function TimesheetEntry() {
                             <TableCell className="text-sm">
                               {entry.payroll ? entry.payroll.ot_hours.toFixed(1) : "N/A"}
                             </TableCell>
+                            <TableCell className="text-sm">
+                              {entry.pto_hours ? entry.pto_hours.toFixed(1) : "0.0"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {(entry.holiday_worked_hours || entry.holiday_non_worked_hours) 
+                                ? ((entry.holiday_worked_hours || 0) + (entry.holiday_non_worked_hours || 0)).toFixed(1) 
+                                : "0.0"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {entry.misc_hours ? entry.misc_hours.toFixed(1) : "0.0"}
+                            </TableCell>
                             <TableCell className="text-sm">{entry.miles}</TableCell>
                             <TableCell className="text-sm">
                               {entry.payroll 
-                                ? formatCurrency(entry.payroll.pay + entry.payroll.mileage_pay) 
+                                ? formatCurrency(entry.payroll.total_pay) 
                                 : "N/A"}
                             </TableCell>
                             <TableCell>{getStatusBadge(entry.status)}</TableCell>
@@ -609,6 +589,13 @@ export default function TimesheetEntry() {
           time_out: selectedEntry.time_out,
           lunch_minutes: selectedEntry.lunch_minutes,
           miles: selectedEntry.miles,
+          pto_hours: selectedEntry.pto_hours || 0,
+          holiday_worked_hours: selectedEntry.holiday_worked_hours || 0,
+          holiday_non_worked_hours: selectedEntry.holiday_non_worked_hours || 0,
+          misc_reimbursement: selectedEntry.misc_reimbursement || 0,
+          misc_hours: selectedEntry.misc_hours || 0,
+          misc_hours_type: selectedEntry.misc_hours_type || "",
+          notes: selectedEntry.notes || "",
           status: selectedEntry.status
         } : undefined}
         isEditMode={timeEntryIsEditMode}

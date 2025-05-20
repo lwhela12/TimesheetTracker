@@ -212,6 +212,16 @@ export default function WeeklyTimeEntryForm({
   });
 
   const handleSubmit = (values: WeeklyTimeEntryFormValues) => {
+    // Create entries from the form data
+    const entries = createTimeEntries(values);
+    
+    // Call the onSubmit prop with all the entries
+    onSubmit(entries);
+    onOpenChange(false);
+  };
+  
+  // Helper function to create time entries from form values
+  const createTimeEntries = (values: WeeklyTimeEntryFormValues) => {
     const weekStartDate = new Date(values.week_start_date);
     const entries = [];
     
@@ -252,9 +262,7 @@ export default function WeeklyTimeEntryForm({
       }
     }
     
-    // Call the onSubmit prop with all the entries
-    onSubmit(entries);
-    onOpenChange(false);
+    return entries;
   };
 
   // Get the real date for a specific day of the week
