@@ -123,10 +123,27 @@ const weeklyTimeEntryFormSchema = z.object({
 
 type WeeklyTimeEntryFormValues = z.infer<typeof weeklyTimeEntryFormSchema>;
 
+type TimeEntryOutput = {
+  employee_id: number;
+  date: string;
+  time_in: string;
+  time_out: string;
+  lunch_minutes: number;
+  miles: number;
+  pto_hours?: number;
+  holiday_worked_hours?: number;
+  holiday_non_worked_hours?: number;
+  misc_reimbursement?: number;
+  misc_hours?: number;
+  misc_hours_type?: string;
+  notes?: string;
+  status: string;
+};
+
 type WeeklyTimeEntryFormProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: WeeklyTimeEntryFormValues) => void;
+  onSubmit: (entries: TimeEntryOutput[]) => void;
   employees: {
     id: number;
     first_name: string;
@@ -213,7 +230,7 @@ export default function WeeklyTimeEntryForm({
 
   const handleSubmit = (values: WeeklyTimeEntryFormValues) => {
     // Create entries from the form data
-    const entries = createTimeEntries(values);
+    const entries: TimeEntryOutput[] = createTimeEntries(values);
     
     // Call the onSubmit prop with all the entries
     onSubmit(entries);
@@ -221,9 +238,9 @@ export default function WeeklyTimeEntryForm({
   };
   
   // Helper function to create time entries from form values
-  const createTimeEntries = (values: WeeklyTimeEntryFormValues) => {
+  const createTimeEntries = (values: WeeklyTimeEntryFormValues): TimeEntryOutput[] => {
     const weekStartDate = new Date(values.week_start_date);
-    const entries = [];
+    const entries: TimeEntryOutput[] = [];
     
     // Loop through each day of the week
     for (let i = 0; i < 7; i++) {
