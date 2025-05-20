@@ -273,7 +273,18 @@ export default function TimesheetEntry() {
   
   // Handle weekly timesheet submission
   const handleWeeklyTimeEntrySubmit = (data: any) => {
-    const { employee_id, week_start_date, total_miles, notes } = data;
+    const { 
+      employee_id, 
+      week_start_date, 
+      total_miles, 
+      total_pto_hours,
+      total_holiday_worked_hours,
+      total_holiday_non_worked_hours,
+      total_misc_reimbursement,
+      total_misc_hours,
+      misc_hours_type,
+      notes 
+    } = data;
     const entries: Array<{
       employee_id: number;
       date: string;
@@ -281,6 +292,12 @@ export default function TimesheetEntry() {
       time_out: string;
       lunch_minutes: number;
       miles: number;
+      pto_hours?: number;
+      holiday_worked_hours?: number;
+      holiday_non_worked_hours?: number;
+      misc_reimbursement?: number;
+      misc_hours?: number;
+      misc_hours_type?: string;
       notes?: string;
       status: string;
     }> = [];
@@ -297,13 +314,24 @@ export default function TimesheetEntry() {
         const dayDate = new Date(startDate);
         dayDate.setDate(startDate.getDate() + index);
         
+        // For the first day of the week, include special hours and reimbursements
+        const isFirstDay = index === 0;
         entries.push({
           employee_id,
           date: formatDate(dayDate),
           time_in: dayData.time_in,
           time_out: dayData.time_out,
           lunch_minutes: dayData.lunch_minutes,
-          miles: index === 6 ? total_miles : 0, // Assign miles only to the last day of the week
+          miles: index === 0 ? total_miles : 0, // Assign miles to the first day of the week
+          
+          // Include special hours and reimbursements on the first day of the week
+          pto_hours: isFirstDay ? data.total_pto_hours || 0 : 0,
+          holiday_worked_hours: isFirstDay ? data.total_holiday_worked_hours || 0 : 0,
+          holiday_non_worked_hours: isFirstDay ? data.total_holiday_non_worked_hours || 0 : 0,
+          misc_reimbursement: isFirstDay ? data.total_misc_reimbursement || 0 : 0,
+          misc_hours: isFirstDay ? data.total_misc_hours || 0 : 0,
+          misc_hours_type: isFirstDay ? data.misc_hours_type || "" : "",
+          
           notes: notes,
           status: "pending"
         });
@@ -491,6 +519,9 @@ export default function TimesheetEntry() {
                         <TableHead>Time Out</TableHead>
                         <TableHead>Reg Hours</TableHead>
                         <TableHead>OT Hours</TableHead>
+                        <TableHead>PTO</TableHead>
+                        <TableHead>Holiday</TableHead>
+                        <TableHead>Misc Hours</TableHead>
                         <TableHead>Miles</TableHead>
                         <TableHead>Pay</TableHead>
                         <TableHead>Status</TableHead>
