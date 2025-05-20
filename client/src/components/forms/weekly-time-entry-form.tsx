@@ -53,6 +53,12 @@ const weeklyTimeEntryFormSchema = z.object({
   week_start_date: z.string().min(1, "Week start date is required"),
   total_miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
   notes: z.string().optional(),
+  total_pto_hours: z.coerce.number().min(0, "Must be 0 or more").default(0),
+  total_holiday_worked_hours: z.coerce.number().min(0, "Must be 0 or more").default(0),
+  total_holiday_non_worked_hours: z.coerce.number().min(0, "Must be 0 or more").default(0),
+  total_misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").default(0),
+  total_misc_hours: z.coerce.number().min(0, "Must be 0 or more").default(0),
+  misc_hours_type: z.string().optional(),
   
   // Day-specific fields (schema will be repeated for each day)
   monday: z.object({
@@ -154,6 +160,12 @@ export default function WeeklyTimeEntryForm({
       week_start_date: getDefaultWeekStartDate(),
       total_miles: 0,
       notes: "",
+      total_pto_hours: 0,
+      total_holiday_worked_hours: 0,
+      total_holiday_non_worked_hours: 0,
+      total_misc_reimbursement: 0,
+      total_misc_hours: 0,
+      misc_hours_type: "",
       monday: {
         worked: true,
         time_in: "08:00", 
@@ -387,6 +399,104 @@ export default function WeeklyTimeEntryForm({
                 </FormItem>
               )}
             />
+
+            <div className="border-t pt-4 mt-2">
+              <h3 className="text-lg font-medium mb-2">Special Hours & Reimbursements</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="total_pto_hours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>PTO Hours</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.5" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="total_misc_reimbursement"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Misc. Reimbursement ($)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.01" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <FormField
+                  control={form.control}
+                  name="total_holiday_worked_hours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Holiday Worked Hours</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.5" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="total_holiday_non_worked_hours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Holiday Non-Worked Hours</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.5" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <FormField
+                  control={form.control}
+                  name="total_misc_hours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Misc. Hours</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.5" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="misc_hours_type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Misc. Hours Type</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="text" 
+                          placeholder="e.g., prior period adjustment"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
 
             <FormField
               control={form.control}
