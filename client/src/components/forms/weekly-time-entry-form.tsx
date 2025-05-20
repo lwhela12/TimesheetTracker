@@ -394,6 +394,7 @@ export default function WeeklyTimeEntryForm({
                     <TableHead className="w-[100px]">Time In</TableHead>
                     <TableHead className="w-[100px]">Time Out</TableHead>
                     <TableHead className="w-[80px]">Lunch</TableHead>
+                    <TableHead className="w-[80px]">Miles</TableHead>
                     <TableHead className="w-[80px]">Hours</TableHead>
                     <TableHead className="w-[80px]">OT</TableHead>
                   </TableRow>
@@ -464,31 +465,59 @@ export default function WeeklyTimeEntryForm({
                             )}
                           />
                         </TableCell>
-                        <TableCell className="text-center">
-                          {
-                            form.watch(`${dayKey}.worked` as any) && 
-                            form.watch(`${dayKey}.time_in` as any) && 
-                            form.watch(`${dayKey}.time_out` as any) ? 
-                            getDailyHours(
-                              form.watch(`${dayKey}.time_in` as any),
-                              form.watch(`${dayKey}.time_out` as any),
-                              form.watch(`${dayKey}.lunch_minutes` as any) || 0
-                            ).regularHours.toFixed(1) : 
-                            "0.0"
-                          }
+                        <TableCell>
+                          <FormField
+                            control={form.control}
+                            name={`${dayKey}.miles` as any}
+                            render={({ field }) => (
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  min="0" 
+                                  step="1" 
+                                  className="w-full"
+                                  {...field} 
+                                  disabled={!form.watch(`${dayKey}.worked` as any)}
+                                />
+                              </FormControl>
+                            )}
+                          />
                         </TableCell>
                         <TableCell className="text-center">
-                          {
-                            form.watch(`${dayKey}.worked` as any) && 
+                          {form.watch(`${dayKey}.worked` as any) && 
                             form.watch(`${dayKey}.time_in` as any) && 
-                            form.watch(`${dayKey}.time_out` as any) ? 
-                            getDailyHours(
-                              form.watch(`${dayKey}.time_in` as any),
-                              form.watch(`${dayKey}.time_out` as any),
-                              form.watch(`${dayKey}.lunch_minutes` as any) || 0
-                            ).overtimeHours.toFixed(1) : 
-                            "0.0"
-                          }
+                            form.watch(`${dayKey}.time_out` as any) && (
+                              <span className="font-medium">
+                                {Math.min(8, calculateHoursWorked(
+                                  form.watch(`${dayKey}.time_in` as any),
+                                  form.watch(`${dayKey}.time_out` as any),
+                                  form.watch(`${dayKey}.lunch_minutes` as any) || 0
+                                )).toFixed(1)}
+                              </span>
+                            )}
+                          {(!form.watch(`${dayKey}.worked` as any) || 
+                            !form.watch(`${dayKey}.time_in` as any) || 
+                            !form.watch(`${dayKey}.time_out` as any)) && (
+                              <span className="text-muted-foreground">0.0</span>
+                            )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {form.watch(`${dayKey}.worked` as any) && 
+                            form.watch(`${dayKey}.time_in` as any) && 
+                            form.watch(`${dayKey}.time_out` as any) && (
+                              <span className="font-medium text-amber-600">
+                                {Math.max(0, calculateHoursWorked(
+                                  form.watch(`${dayKey}.time_in` as any),
+                                  form.watch(`${dayKey}.time_out` as any),
+                                  form.watch(`${dayKey}.lunch_minutes` as any) || 0
+                                ) - 8).toFixed(1)}
+                              </span>
+                            )}
+                          {(!form.watch(`${dayKey}.worked` as any) || 
+                            !form.watch(`${dayKey}.time_in` as any) || 
+                            !form.watch(`${dayKey}.time_out` as any)) && (
+                              <span className="text-muted-foreground">0.0</span>
+                            )}
                         </TableCell>
                       </TableRow>
                     );
