@@ -39,6 +39,12 @@ const timeEntryFormSchema = z.object({
   time_out: z.string().min(1, "Time out is required"),
   lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(0),
   miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+  pto_hours: z.coerce.number().min(0, "Must be 0 or more").default(0),
+  holiday_worked_hours: z.coerce.number().min(0, "Must be 0 or more").default(0),
+  holiday_non_worked_hours: z.coerce.number().min(0, "Must be 0 or more").default(0),
+  misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").default(0),
+  misc_hours: z.coerce.number().min(0, "Must be 0 or more").default(0),
+  misc_hours_type: z.string().optional(),
   notes: z.string().optional(),
   status: z.string().default("pending"),
 });
@@ -78,6 +84,12 @@ export default function TimeEntryForm({
       time_out: initialData?.time_out || "17:00",
       lunch_minutes: initialData?.lunch_minutes || 30,
       miles: initialData?.miles || 0,
+      pto_hours: initialData?.pto_hours || 0,
+      holiday_worked_hours: initialData?.holiday_worked_hours || 0,
+      holiday_non_worked_hours: initialData?.holiday_non_worked_hours || 0,
+      misc_reimbursement: initialData?.misc_reimbursement || 0,
+      misc_hours: initialData?.misc_hours || 0,
+      misc_hours_type: initialData?.misc_hours_type || "",
       notes: initialData?.notes || "",
       status: initialData?.status || "pending",
     },
@@ -93,6 +105,12 @@ export default function TimeEntryForm({
         time_out: initialData.time_out || "17:00",
         lunch_minutes: initialData.lunch_minutes || 30,
         miles: initialData.miles || 0,
+        pto_hours: initialData.pto_hours || 0,
+        holiday_worked_hours: initialData.holiday_worked_hours || 0,
+        holiday_non_worked_hours: initialData.holiday_non_worked_hours || 0,
+        misc_reimbursement: initialData.misc_reimbursement || 0,
+        misc_hours: initialData.misc_hours || 0,
+        misc_hours_type: initialData.misc_hours_type || "",
         notes: initialData.notes || "",
         status: initialData.status || "pending",
       });
@@ -214,6 +232,104 @@ export default function TimeEntryForm({
                   </FormItem>
                 )}
               />
+            </div>
+            
+            <div className="border-t pt-4 mt-2">
+              <h3 className="text-lg font-medium mb-2">Special Hours & Reimbursements</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="pto_hours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>PTO Hours</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.5" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="misc_reimbursement"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Misc. Reimbursement ($)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.01" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <FormField
+                  control={form.control}
+                  name="holiday_worked_hours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Holiday Worked Hours</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.5" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="holiday_non_worked_hours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Holiday Non-Worked Hours</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.5" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <FormField
+                  control={form.control}
+                  name="misc_hours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Misc. Hours</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.5" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="misc_hours_type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Misc. Hours Type</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="text" 
+                          placeholder="e.g., prior period adjustment"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
 
             {isEditMode && (

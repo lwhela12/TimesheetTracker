@@ -279,6 +279,10 @@ export class MemStorage implements IStorage {
     const otThresholdSetting = await this.getSetting('ot_threshold');
     const otThreshold = parseFloat(otThresholdSetting?.value || '40');
     
+    // Get holiday rate multiplier from settings (default to 1.5x if not set)
+    const holidayRateMultiplierSetting = await this.getSetting('holiday_rate_multiplier');
+    const holidayRateMultiplier = parseFloat(holidayRateMultiplierSetting?.value || '1.5');
+    
     // Calculate hours worked
     const timeIn = new Date(`1970-01-01T${punch.time_in}`);
     const timeOut = new Date(`1970-01-01T${punch.time_out}`);
@@ -288,16 +292,32 @@ export class MemStorage implements IStorage {
     
     const totalHours = totalMinutes / 60;
     
-    // For MVP, simply apply anything over 8 hours as overtime
+    // For MVP, apply anything over 8 hours as overtime
     // In a real implementation, this would track weekly hours per employee
     let regHours = Math.min(8, totalHours);
     let otHours = Math.max(0, totalHours - 8);
     
-    // Calculate pay
+    // Get all hours types
+    const ptoHours = punch.pto_hours || 0;
+    const holidayWorkedHours = punch.holiday_worked_hours || 0;
+    const holidayNonWorkedHours = punch.holiday_non_worked_hours || 0;
+    const miscHours = punch.misc_hours || 0;
+    
+    // Calculate pay for each type of hours
     const regPay = regHours * employee.rate;
     const otPay = otHours * employee.rate * 1.5;
+    const ptoPay = ptoHours * employee.rate;
+    const holidayWorkedPay = holidayWorkedHours * employee.rate * holidayRateMultiplier;
+    const holidayNonWorkedPay = holidayNonWorkedHours * employee.rate;
+    const miscHoursPay = miscHours * employee.rate; // Assume regular rate for misc hours
+    
+    // Calculate reimbursements
     const mileagePay = punch.miles * mileageRate;
-    const totalPay = regPay + otPay + mileagePay;
+    const miscReimbursement = punch.misc_reimbursement || 0;
+    
+    // Calculate total pay
+    const hourlyPay = regPay + otPay + ptoPay + holidayWorkedPay + holidayNonWorkedPay + miscHoursPay;
+    const totalPay = hourlyPay + mileagePay + miscReimbursement;
     
     // Check for existing payroll calculation
     let existing: PayrollCalc | undefined;
@@ -314,8 +334,20 @@ export class MemStorage implements IStorage {
         ...existing,
         reg_hours: regHours,
         ot_hours: otHours,
-        pay: regPay + otPay,
+        pto_hours: ptoHours,
+        holiday_worked_hours: holidayWorkedHours,
+        holiday_non_worked_hours: holidayNonWorkedHours,
+        misc_hours: miscHours,
+        reg_pay: regPay,
+        ot_pay: otPay,
+        pto_pay: ptoPay,
+        holiday_worked_pay: holidayWorkedPay,
+        holiday_non_worked_pay: holidayNonWorkedPay,
+        misc_hours_pay: miscHoursPay,
+        pay: hourlyPay,
         mileage_pay: mileagePay,
+        misc_reimbursement: miscReimbursement,
+        total_pay: totalPay,
         calculated_at: new Date()
       };
       this.payroll_calcs.set(existing.id, updated);
@@ -328,8 +360,20 @@ export class MemStorage implements IStorage {
         punch_id,
         reg_hours: regHours,
         ot_hours: otHours,
-        pay: regPay + otPay,
+        pto_hours: ptoHours,
+        holiday_worked_hours: holidayWorkedHours,
+        holiday_non_worked_hours: holidayNonWorkedHours,
+        misc_hours: miscHours,
+        reg_pay: regPay,
+        ot_pay: otPay,
+        pto_pay: ptoPay,
+        holiday_worked_pay: holidayWorkedPay,
+        holiday_non_worked_pay: holidayNonWorkedPay,
+        misc_hours_pay: miscHoursPay,
+        pay: hourlyPay,
         mileage_pay: mileagePay,
+        misc_reimbursement: miscReimbursement,
+        total_pay: totalPay,
         calculated_at: new Date()
       };
       this.payroll_calcs.set(id, calc);
