@@ -17,6 +17,7 @@ export const employees = pgTable("employees", {
   first_name: varchar("first_name", { length: 50 }).notNull(),
   last_name: varchar("last_name", { length: 50 }).notNull(),
   rate: doublePrecision("rate").notNull(), // Hourly rate
+  hire_date: date("hire_date"),
   active: boolean("active").notNull().default(true),
   created_at: timestamp("created_at").defaultNow(),
 });
@@ -30,6 +31,12 @@ export const punches = pgTable("punches", {
   time_out: time("time_out").notNull(),
   lunch_minutes: integer("lunch_minutes").default(0),
   miles: doublePrecision("miles").default(0),
+  pto_hours: doublePrecision("pto_hours").default(0),
+  holiday_worked_hours: doublePrecision("holiday_worked_hours").default(0),
+  holiday_non_worked_hours: doublePrecision("holiday_non_worked_hours").default(0),
+  misc_reimbursement: doublePrecision("misc_reimbursement").default(0),
+  misc_hours: doublePrecision("misc_hours").default(0),
+  misc_hours_type: varchar("misc_hours_type", { length: 20 }),
   status: varchar("status", { length: 20 }).notNull().default("pending"),
   created_by: integer("created_by").references(() => users.id),
   created_at: timestamp("created_at").defaultNow(),
@@ -41,8 +48,20 @@ export const payroll_calcs = pgTable("payroll_calcs", {
   punch_id: integer("punch_id").notNull().references(() => punches.id),
   reg_hours: doublePrecision("reg_hours").notNull(),
   ot_hours: doublePrecision("ot_hours").notNull(),
-  pay: doublePrecision("pay").notNull(),
+  pto_hours: doublePrecision("pto_hours").default(0),
+  holiday_worked_hours: doublePrecision("holiday_worked_hours").default(0),
+  holiday_non_worked_hours: doublePrecision("holiday_non_worked_hours").default(0),
+  misc_hours: doublePrecision("misc_hours").default(0),
+  reg_pay: doublePrecision("reg_pay").notNull(),
+  ot_pay: doublePrecision("ot_pay").notNull(),
+  pto_pay: doublePrecision("pto_pay").default(0),
+  holiday_worked_pay: doublePrecision("holiday_worked_pay").default(0),
+  holiday_non_worked_pay: doublePrecision("holiday_non_worked_pay").default(0),
+  misc_hours_pay: doublePrecision("misc_hours_pay").default(0),
+  pay: doublePrecision("pay").notNull(), // Total of all hourly pay
   mileage_pay: doublePrecision("mileage_pay").notNull(),
+  misc_reimbursement: doublePrecision("misc_reimbursement").default(0),
+  total_pay: doublePrecision("total_pay").notNull(), // Grand total including all pay and reimbursements
   calculated_at: timestamp("calculated_at").defaultNow(),
 });
 
@@ -77,6 +96,7 @@ export const insertEmployeeSchema = createInsertSchema(employees).pick({
   first_name: true,
   last_name: true,
   rate: true,
+  hire_date: true,
   active: true,
 });
 
@@ -87,6 +107,12 @@ export const insertPunchSchema = createInsertSchema(punches).pick({
   time_out: true,
   lunch_minutes: true,
   miles: true,
+  pto_hours: true,
+  holiday_worked_hours: true,
+  holiday_non_worked_hours: true,
+  misc_reimbursement: true,
+  misc_hours: true,
+  misc_hours_type: true,
   status: true,
   created_by: true,
 });
@@ -95,8 +121,20 @@ export const insertPayrollCalcSchema = createInsertSchema(payroll_calcs).pick({
   punch_id: true,
   reg_hours: true,
   ot_hours: true,
+  pto_hours: true,
+  holiday_worked_hours: true,
+  holiday_non_worked_hours: true,
+  misc_hours: true,
+  reg_pay: true,
+  ot_pay: true,
+  pto_pay: true,
+  holiday_worked_pay: true,
+  holiday_non_worked_pay: true,
+  misc_hours_pay: true,
   pay: true,
   mileage_pay: true,
+  misc_reimbursement: true,
+  total_pay: true,
 });
 
 export const insertAuditLogSchema = createInsertSchema(audit_logs).pick({

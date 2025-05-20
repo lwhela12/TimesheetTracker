@@ -1,0 +1,132 @@
+Okay, I've reviewed the feedback. Here's a description of the necessary updates to the project, keeping in mind that PTO tracking is for usage only, not accruals.
+
+**Project Updates Based on Client Feedback:**
+
+**1. PTO (Paid Time Off) Hours Usage:**
+    * **Data Model (`shared/schema.ts`):**
+        * Add a `pto_hours` field (e.g., `doublePrecision`) to the `punches` table. This field will store the number of PTO hours used for a specific day/entry.
+        * Update `insertPunchSchema` to include `pto_hours`.
+    * **Backend (`server/storage.ts`, `server/routes.ts`):**
+        * Modify `createPunch` and `updatePunch` in `storage.ts` to handle `pto_hours`.
+        * Update the `calculatePayroll` function in `storage.ts`:
+            * PTO hours should be paid at the employee's regular rate.
+            * Ensure PTO hours are distinct from regular/overtime and do not count towards OT calculation.
+            * The `pay` field in `payroll_calcs` should incorporate PTO pay.
+        * Adjust API endpoints for creating/updating punches (`/api/punches`) in `routes.ts` to accept and process `pto_hours`.
+    * **UI (`client/src/components/forms/time-entry-form.tsx`, `client/src/pages/timesheet-entry.tsx`):**
+        * Add a "PTO Hours" input field to the `TimeEntryForm`.
+        * Update the timesheet display (`timesheet-entry.tsx`) to show PTO hours.
+        * The "Weekly Time Entry Form" (`client/src/components/forms/weekly-time-entry-form.tsx`) would also need an input for PTO hours for each day.
+
+**2. Miscellaneous Reimbursements (Dollar Amount):**
+    * **Data Model (`shared/schema.ts`):**
+        * Add a `misc_reimbursement` field (e.g., `doublePrecision`) to the `punches` table.
+        * Update `insertPunchSchema` to include `misc_reimbursement`.
+    * **Backend (`server/storage.ts`, `server/routes.ts`):**
+        * Modify `createPunch` and `updatePunch` in `storage.ts` to handle `misc_reimbursement`.
+        * Update `calculatePayroll` in `storage.ts`:
+            * Add `misc_reimbursement` to the total pay. This amount is separate from hourly pay or mileage pay.
+            * The `pay` field in `payroll_calcs` might need to be redefined, or a new field like `total_reimbursements` could be added if you want to keep hourly pay separate from other reimbursements. The current `payroll_calcs.pay` seems to be for worked hours, and `mileage_pay` is separate. A `total_pay` including everything might be useful on this table too.
+        * Adjust punch API endpoints in `routes.ts`.
+    * **UI (`client/src/components/forms/time-entry-form.tsx`, `client/src/pages/timesheet-entry.tsx`):**
+        * Add a "Misc. Reimbursement ($)" input field to the `TimeEntryForm`.
+        * Display this amount in the timesheet view.
+        * The "Weekly Time Entry Form" might sum these up as a "Total Weekly Reimbursements" or allow daily entry.
+
+**3. Miscellaneous Hours (Regular or Overtime from Previous Pay Periods):**
+    * **Option A (Simpler - Leverage Existing Notes):**
+        * No immediate schema change. Emphasize using the `notes` field in the `punches` table (already in `time-entry-form.tsx`) for such adjustments.
+        * Ensure the `notes` field is prominently displayed in relevant reports.
+    * **Option B (More Formal):**
+        * **Data Model (`shared/schema.ts`):**
+            * Add `adjustment_hours` (doublePrecision) and `adjustment_type` (text, e.g., 'regular', 'overtime', 'pto_adjustment', 'holiday_adjustment') fields to the `punches` table.
+            * Alternatively, create a new `adjustments` table linked to an employee and pay period, if these are not tied to a specific "punch" day.
+        * **Backend (`server/storage.ts`, `server/routes.ts`):**
+            * Modify punch creation/update logic to handle these adjustment hours.
+            * `calculatePayroll` would need to incorporate these, paying them at the appropriate rate (regular or OT).
+        * **UI (`client/src/components/forms/time-entry-form.tsx`):**
+            * Add fields for "Adjustment Hours" and "Adjustment Type" to the form, possibly in a separate section or a dedicated "Adjustment Entry" form.
+    * **Recommendation:** Given the client's comment ("What I do now is just add it manually and put a note... which I can continue doing"), Option A might be sufficient for MVP. The key is ensuring notes are clearly visible. If more robust tracking is needed later, Option B can be implemented.
+
+**4. Hire Date for Employees:**
+    * **Data Model (`shared/schema.ts`):**
+        * Add a `hire_date` field (`date`) to the `employees` table.
+        * Update `insertEmployeeSchema` to include `hire_date`.
+    * **Backend (`server/storage.ts`, `server/routes.ts`):**
+        * Modify `createEmployee` and `updateEmployee` in `storage.ts` to handle `hire_date`.
+        * Adjust employee API endpoints in `routes.ts`.
+    * **UI (`client/src/components/forms/employee-form.tsx`, `client/src/pages/employees.tsx`):**
+        * Add a "Hire Date" input field to the `EmployeeForm`.
+        * Display the hire date in the employee list/details page (`employees.tsx`).
+
+**5. Holiday Non-Worked Hours:**
+    * **Data Model (`shared/schema.ts`):**
+        * Add a `holiday_non_worked_hours` field (e.g., `doublePrecision`) to the `punches` table. (Similar to PTO usage).
+        * Update `insertPunchSchema` accordingly.
+    * **Backend (`server/storage.ts`, `server/routes.ts`):**
+        * Modify punch and payroll logic. These hours are typically paid at the regular rate and don't count towards OT.
+        * Adjust punch API endpoints.
+    * **UI (`client/src/components/forms/time-entry-form.tsx`):**
+        * Add a "Holiday Non-Worked Hours" input to the `TimeEntryForm`.
+        * The "Weekly Time Entry Form" would need a similar field per day.
+
+**6. Holiday Worked Hours (Premium Rate):**
+    * **Data Model (`shared/schema.ts`):**
+        * Consider how to represent this. Could be a boolean `is_holiday_worked` on the `punches` table, or a separate field for `holiday_worked_hours`. If it's specific hours within a shift, it's more complex. If an entire shift on a holiday gets a premium, a boolean flag is simpler.
+        * The `payroll_calcs` table might need a field for `holiday_premium_pay`.
+    * **Backend (`server/storage.ts`, `server/routes.ts`):**
+        * Update `calculatePayroll`:
+            * A system setting (see `server/storage.ts` `settings` table) for "Holiday Rate Multiplier" (e.g., 1.5x, 2x) would be needed. Default to 1.5x if not specified in the ADP system. The client mentions the rate is "already set on ADP", so the system might just need to *flag* these hours for ADP, rather than calculate the premium itself if the export is just raw hours. Clarify if the *calculation* or just the *designation* of hours is needed. For now, assume designation and separate calculation.
+            * Hours worked on a holiday would be paid at `employee.rate * holiday_multiplier`. These hours might or might not count towards weekly OT depending on policy (clarify with client).
+        * Adjust punch API endpoints.
+    * **UI (`client/src/components/forms/time-entry-form.tsx`):**
+        * Add an option to mark a day/punch as "Holiday Worked" or input "Holiday Worked Hours" in the `TimeEntryForm`.
+        * The "Weekly Time Entry Form" would need a similar option per day.
+
+**7. "Top Sheet" Equivalent Report:**
+    * **Backend (`server/storage.ts`, `server/routes.ts`):**
+        * Create a new API endpoint (e.g., `/api/reports/pay-period-summary`).
+        * This endpoint would take a date range (defining the pay period) as input.
+        * The logic in `storage.ts` would fetch all relevant `punches` and their associated `payroll_calcs` for that period.
+        * It would then aggregate totals for: Regular Hours, Overtime Hours, PTO Hours, Holiday Non-Worked Hours, Holiday Worked Hours, Mileage Reimbursement, Miscellaneous Reimbursements, and Gross Pay.
+    * **UI (`client/src/pages/reports.tsx`):**
+        * Add a new section/tab for this "Pay Period Summary" report.
+        * It should allow users to select a pay period (likely via date pickers for start/end).
+        * Display the aggregated totals clearly.
+        * This report should be exportable (CSV/PDF as per original spec).
+
+**8. Customizable Pay Periods & Overtime Calculation:**
+    * **Data Model (`shared/schema.ts`):**
+        * Add a `work_week_start_day` field (e.g., integer 0 for Sunday, 1 for Monday... or text 'Wednesday', 'Saturday') to a company settings table or potentially the existing `settings` table if the app is single-tenant. The design doc (source 1, 5) implies a potential multi-tenant SaaS, so company-specific settings would be better. For now, a global setting is simpler as per current `settings` table.
+    * **Backend (`server/storage.ts`, `server/routes.ts`):**
+        * Modify `calculatePayroll` in `storage.ts`. The logic for summing weekly hours to determine OT eligibility must use this `work_week_start_day` setting. This is a significant change to how OT hours are determined, moving from a simple daily >8 OT (as implemented in `MemStorage.calculatePayroll`) or fixed weekly threshold to a configurable weekly window.
+        * The current `MemStorage.calculatePayroll` says "For MVP, simply apply anything over 8 hours as overtime". This needs to be updated to respect the 40hr/wk rule (source 2, "Pasted--Timesheet-Payroll-Manager-Design-Document...txt") and the new customizable week start.
+        * The `settings` API in `routes.ts` would need to allow viewing/updating this new setting.
+    * **UI (`client/src/pages/settings.tsx`):**
+        * Add a UI element in the admin settings page for configuring the "Work Week Start Day".
+
+**9. Lunch Breaks (Conditional Deduction):**
+    * **Current Implementation:** The `punches` table has `lunch_minutes` (default 0). The `TimeEntryForm` (`client/src/components/forms/time-entry-form.tsx`) has an input for this. The `MemStorage.calculatePayroll` deducts these manually entered minutes.
+    * **Clarification for Dev:** The system correctly supports manual entry of lunch minutes. The client's requirement is met by the clerk entering 0 lunch minutes if the shift is less than 8 hours. No automatic deduction is currently implemented, which aligns with their need.
+    * **Documentation/Training:** Ensure users (clerks) understand they should manually input `0` for lunch if it's not to be deducted.
+
+**10. AM/PM Handling & Decimal Hour Calculation:**
+    * **Current Implementation:**
+        * Times are stored as `time` type in Postgres (`shared/schema.ts`).
+        * The `client/src/lib/utils.ts` `formatTime` function handles 12/24h display, and `calculateHoursWorked` correctly calculates decimal hours and handles overnight shifts.
+        * The `TimeEntryForm` (`client/src/components/forms/time-entry-form.tsx`) uses `<Input type="time" />`.
+    * **Clarification for Dev:** The core logic seems to handle this correctly. Emphasize thorough testing for various scenarios, especially overnight shifts and edge cases around midnight, to ensure calculations in `server/storage.ts` `calculatePayroll` are consistently accurate and match the client-side utility. The design doc's calculation `Pay = Reg hrs × Rate + OT hrs × Rate × 1.5 + Miles × Rate/mi` (source 16, "Pasted--Timesheet-Payroll-Manager-Design-Document...txt") relies on accurate `Reg hrs` and `OT hrs` which must be in decimal format.
+
+**General Project Structure Considerations for Dev:**
+
+* **Settings Management:** The new configurable items (work week start day, holiday rate multiplier) should be added to the `settings` table and managed via the `/api/settings` endpoint and the UI in `client/src/pages/settings.tsx`.
+* **Payroll Calculation Logic (`server/storage.ts`):** The `calculatePayroll` method will become significantly more complex. It needs to:
+    * Fetch relevant settings (OT threshold, mileage rate, work week start day, holiday multiplier).
+    * Correctly identify regular, OT, PTO, holiday-worked, and holiday-non-worked hours based on punch data and settings.
+    * Sum reimbursements.
+* **Audit Trails (`server/storage.ts` `addAuditLog`):** Ensure new fields and settings changes are properly logged in the `audit_logs` table.
+* **UI Forms (`client/src/components/forms/`):** Systematically add new fields to `TimeEntryForm.tsx`, `WeeklyTimeEntryForm.tsx`, and `EmployeeForm.tsx`.
+* **Reporting (`client/src/pages/reports.tsx`):** The existing reports will need to be updated to include these new pay components. The new "Top Sheet" report needs to be created.
+* **Schema (`shared/schema.ts`):** This will be the starting point for many changes. After updating, remember to run `drizzle-kit push` (as per `package.json` script) to update the database schema if using a live DB, or update the `MemStorage` class if only using in-memory for now.
+
+This is a substantial set of updates. It would be beneficial to prioritize them with the client (perhaps aligning with the phased roadmap in the design document if possible, though these are mostly new features).
