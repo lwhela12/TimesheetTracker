@@ -67,42 +67,77 @@ const weeklyTimeEntryFormSchema = z.object({
     time_in: z.string().optional(),
     time_out: z.string().optional(),
     lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
   }),
   tuesday: z.object({
     worked: z.boolean().default(true),
     time_in: z.string().optional(),
     time_out: z.string().optional(),
     lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
   }),
   wednesday: z.object({
     worked: z.boolean().default(true),
     time_in: z.string().optional(),
     time_out: z.string().optional(),
     lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
   }),
   thursday: z.object({
     worked: z.boolean().default(true),
     time_in: z.string().optional(),
     time_out: z.string().optional(),
     lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
   }),
   friday: z.object({
     worked: z.boolean().default(true),
     time_in: z.string().optional(),
     time_out: z.string().optional(),
     lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
   }),
   saturday: z.object({
     worked: z.boolean().default(false),
     time_in: z.string().optional(),
     time_out: z.string().optional(),
     lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
   }),
   sunday: z.object({
     worked: z.boolean().default(false),
     time_in: z.string().optional(),
     time_out: z.string().optional(),
     lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
   }),
 }).refine(
   (data) => {
@@ -248,29 +283,27 @@ export default function WeeklyTimeEntryForm({
       const dayKey = DAYS_OF_WEEK[i].toLowerCase() as keyof WeeklyTimeEntryFormValues;
       const dayInfo = values[dayKey] as any;
       
-      // Only create entries for days marked as worked
-      if (dayInfo.worked) {
+      // Only create entries for days marked as worked or with PTO/holiday hours
+      if (dayInfo.worked || dayInfo.pto_hours || dayInfo.holiday_hours || dayInfo.misc_hours) {
         // Calculate the date for this day (weekStartDate + i days)
         const entryDate = addDays(weekStartDate, i);
         
         // Create the entry object
-        const isMonday = i === 0;
         const entry = {
           employee_id: values.employee_id,
           date: formatDate(entryDate),
-          time_in: dayInfo.time_in,
-          time_out: dayInfo.time_out,
-          lunch_minutes: dayInfo.lunch_minutes,
-          miles: isMonday ? values.total_miles : 0, // Assign all miles to Monday
+          time_in: dayInfo.worked ? dayInfo.time_in : null,
+          time_out: dayInfo.worked ? dayInfo.time_out : null,
+          lunch_minutes: dayInfo.worked ? dayInfo.lunch_minutes : 0,
+          miles: dayInfo.miles || 0,
           
-          // Only add special hours and reimbursements to Monday for simplicity
-          // These can be distributed differently if needed in the future
-          pto_hours: isMonday ? values.total_pto_hours : 0,
-          holiday_worked_hours: isMonday ? values.total_holiday_worked_hours : 0,
-          holiday_non_worked_hours: isMonday ? values.total_holiday_non_worked_hours : 0,
-          misc_reimbursement: isMonday ? values.total_misc_reimbursement : 0,
-          misc_hours: isMonday ? values.total_misc_hours : 0,
-          misc_hours_type: isMonday ? values.misc_hours_type : "",
+          // Use day-specific fields for each entry
+          pto_hours: dayInfo.pto_hours || 0,
+          holiday_worked_hours: dayInfo.holiday_hours || 0, // Using holiday_hours field for worked hours
+          holiday_non_worked_hours: 0, // Not used in new UI
+          misc_reimbursement: dayInfo.misc_reimbursement || 0,
+          misc_hours: dayInfo.misc_hours || 0,
+          misc_hours_type: values.misc_hours_type || "",
           
           notes: values.notes,
           status: "pending"
@@ -383,9 +416,9 @@ export default function WeeklyTimeEntryForm({
               />
             </div>
 
-            <div className="border rounded-md p-0">
+            <div className="border rounded-md p-0 mb-4">
               <Table>
-                <TableCaption>Timesheet for week of {form.watch("week_start_date")}</TableCaption>
+                <TableCaption>Regular Hours for week of {form.watch("week_start_date")}</TableCaption>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[80px]">Day</TableHead>
