@@ -1,8 +1,9 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { addDays, format, startOfWeek, getDay } from "date-fns";
+import { calculateHoursWorked } from "@/lib/utils";
 import {
   Form,
   FormControl,
@@ -304,6 +305,22 @@ export default function WeeklyTimeEntryForm({
     }
   };
 
+  // Calculate daily hours
+  const getDailyHours = (timeIn: string, timeOut: string, lunchMinutes: number) => {
+    if (!timeIn || !timeOut || !form) return { regularHours: 0, overtimeHours: 0 };
+    
+    try {
+      const hoursInfo = calculateHoursWorked(timeIn, timeOut, lunchMinutes);
+      // Assuming 8-hour standard day for overtime calculation
+      const regularHours = Math.min(8, hoursInfo);
+      const overtimeHours = Math.max(0, hoursInfo - 8);
+      
+      return { regularHours, overtimeHours };
+    } catch (error) {
+      return { regularHours: 0, overtimeHours: 0 };
+    }
+  };
+
   // Function to handle the worked checkbox
   const handleWorkedChange = (day: string, worked: boolean) => {
     const dayKey = day.toLowerCase() as keyof WeeklyTimeEntryFormValues;
@@ -371,12 +388,14 @@ export default function WeeklyTimeEntryForm({
                 <TableCaption>Timesheet for week of {form.watch("week_start_date")}</TableCaption>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[100px]">Day</TableHead>
-                    <TableHead className="w-[120px]">Date</TableHead>
-                    <TableHead className="w-[90px] text-center">Worked</TableHead>
-                    <TableHead className="w-[120px]">Time In</TableHead>
-                    <TableHead className="w-[120px]">Time Out</TableHead>
-                    <TableHead className="w-[120px]">Lunch (min)</TableHead>
+                    <TableHead className="w-[80px]">Day</TableHead>
+                    <TableHead className="w-[100px]">Date</TableHead>
+                    <TableHead className="w-[70px] text-center">Worked</TableHead>
+                    <TableHead className="w-[100px]">Time In</TableHead>
+                    <TableHead className="w-[100px]">Time Out</TableHead>
+                    <TableHead className="w-[80px]">Lunch</TableHead>
+                    <TableHead className="w-[80px]">Hours</TableHead>
+                    <TableHead className="w-[80px]">OT</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -444,6 +463,32 @@ export default function WeeklyTimeEntryForm({
                               </FormControl>
                             )}
                           />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {
+                            form.watch(`${dayKey}.worked` as any) && 
+                            form.watch(`${dayKey}.time_in` as any) && 
+                            form.watch(`${dayKey}.time_out` as any) ? 
+                            getDailyHours(
+                              form.watch(`${dayKey}.time_in` as any),
+                              form.watch(`${dayKey}.time_out` as any),
+                              form.watch(`${dayKey}.lunch_minutes` as any) || 0
+                            ).regularHours.toFixed(1) : 
+                            "0.0"
+                          }
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {
+                            form.watch(`${dayKey}.worked` as any) && 
+                            form.watch(`${dayKey}.time_in` as any) && 
+                            form.watch(`${dayKey}.time_out` as any) ? 
+                            getDailyHours(
+                              form.watch(`${dayKey}.time_in` as any),
+                              form.watch(`${dayKey}.time_out` as any),
+                              form.watch(`${dayKey}.lunch_minutes` as any) || 0
+                            ).overtimeHours.toFixed(1) : 
+                            "0.0"
+                          }
                         </TableCell>
                       </TableRow>
                     );
