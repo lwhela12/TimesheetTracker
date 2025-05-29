@@ -32,7 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Employee } from "@shared/schema";
-import { formatDate } from "@/lib/utils";
+import { formatDate, parseLocalDate } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
@@ -415,7 +415,7 @@ export default function WeeklyTimeEntryForm({
   
   // Helper function to create time entries from form values
   const createTimeEntries = (values: WeeklyTimeEntryFormValues): TimeEntryOutput[] => {
-    const weekStartDate = new Date(values.week_start_date);
+    const weekStartDate = parseLocalDate(values.week_start_date);
     const entries: TimeEntryOutput[] = [];
     
     // Loop through each day of the two-week period (14 days)
@@ -470,7 +470,7 @@ export default function WeeklyTimeEntryForm({
   // Get the real date for a specific day of the week
   const getDateForDay = (weekStartDate: string, dayIndex: number) => {
     try {
-      const startDate = new Date(weekStartDate);
+      const startDate = parseLocalDate(weekStartDate);
       const dayDate = addDays(startDate, dayIndex);
       return format(dayDate, "yyyy-MM-dd");
     } catch (error) {
@@ -481,7 +481,7 @@ export default function WeeklyTimeEntryForm({
   // Get formatted date for display
   const getFormattedDateForDay = (weekStartDate: string, dayIndex: number) => {
     try {
-      const startDate = new Date(weekStartDate);
+      const startDate = parseLocalDate(weekStartDate);
       const dayDate = addDays(startDate, dayIndex);
       return format(dayDate, "MM/dd/yyyy");
     } catch (error) {
@@ -492,7 +492,7 @@ export default function WeeklyTimeEntryForm({
   // Get the actual day name for a given date
   const getActualDayName = (weekStartDate: string, dayIndex: number) => {
     try {
-      const startDate = new Date(weekStartDate);
+      const startDate = parseLocalDate(weekStartDate);
       const dayDate = addDays(startDate, dayIndex);
       return format(dayDate, "EEEE"); // Full day name (e.g., "Wednesday")
     } catch (error) {
@@ -600,7 +600,7 @@ export default function WeeklyTimeEntryForm({
                   (() => {
                     const startDate = form.watch("week_start_date");
                     if (startDate) {
-                      const endDate = new Date(startDate);
+                      const endDate = parseLocalDate(startDate);
                       endDate.setDate(endDate.getDate() + 13); // 14 days total (0-13)
                       return format(endDate, "yyyy-MM-dd");
                     }

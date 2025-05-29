@@ -12,6 +12,12 @@ export function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// Parse a YYYY-MM-DD string as a local Date object to avoid timezone shifts
+export function parseLocalDate(dateString: string): Date {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
