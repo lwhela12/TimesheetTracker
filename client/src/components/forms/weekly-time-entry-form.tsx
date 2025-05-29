@@ -44,9 +44,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-// Define days of the week
-const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+// Define days of the week starting with Wednesday (payroll period)
+const DAYS_OF_WEEK = ["Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday"];
+const SHORT_DAYS = ["Wed", "Thu", "Fri", "Sat", "Sun", "Mon", "Tue"];
 
 // Create a schema for the weekly time entry form
 const weeklyTimeEntryFormSchema = z.object({
@@ -62,28 +62,6 @@ const weeklyTimeEntryFormSchema = z.object({
   misc_hours_type: z.string().optional(),
   
   // Day-specific fields (schema will be repeated for each day)
-  monday: z.object({
-    worked: z.boolean().default(true),
-    time_in: z.string().optional(),
-    time_out: z.string().optional(),
-    lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
-    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
-    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
-    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
-    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
-    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
-  }),
-  tuesday: z.object({
-    worked: z.boolean().default(true),
-    time_in: z.string().optional(),
-    time_out: z.string().optional(),
-    lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
-    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
-    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
-    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
-    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
-    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
-  }),
   wednesday: z.object({
     worked: z.boolean().default(true),
     time_in: z.string().optional(),
@@ -139,10 +117,32 @@ const weeklyTimeEntryFormSchema = z.object({
     misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
     misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
   }),
+  monday: z.object({
+    worked: z.boolean().default(true),
+    time_in: z.string().optional(),
+    time_out: z.string().optional(),
+    lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
+  }),
+  tuesday: z.object({
+    worked: z.boolean().default(true),
+    time_in: z.string().optional(),
+    time_out: z.string().optional(),
+    lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
+  }),
 }).refine(
   (data) => {
     // For each day where worked is true, validate that time_in and time_out are provided
-    const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+    const days = ["wednesday", "thursday", "friday", "saturday", "sunday", "monday", "tuesday"];
     for (const day of days) {
       const dayData = data[day as keyof typeof data] as { worked: boolean; time_in?: string; time_out?: string };
       if (dayData.worked && (!dayData.time_in || !dayData.time_out)) {
@@ -196,13 +196,25 @@ export default function WeeklyTimeEntryForm({
   onSubmit,
   employees,
 }: WeeklyTimeEntryFormProps) {
-  // Get the Monday of the current week as the default start date
+  // Get the Wednesday of the current payroll week as the default start date
   const getDefaultWeekStartDate = () => {
     const today = new Date();
-    const dayOfWeek = getDay(today);
-    const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Adjust for Monday start
-    const monday = startOfWeek(today, { weekStartsOn: 1 });
-    return formatDate(monday);
+    const dayOfWeek = getDay(today); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    
+    // Calculate days to subtract to get to Wednesday
+    // Wednesday = 3, so we want to find the most recent Wednesday
+    let daysToSubtract;
+    if (dayOfWeek >= 3) {
+      // If today is Wednesday (3) or later in the week, go back to this week's Wednesday
+      daysToSubtract = dayOfWeek - 3;
+    } else {
+      // If today is Sunday (0), Monday (1), or Tuesday (2), go back to last week's Wednesday
+      daysToSubtract = dayOfWeek + 4; // 0+4=4, 1+4=5, 2+4=6
+    }
+    
+    const wednesday = new Date(today);
+    wednesday.setDate(today.getDate() - daysToSubtract);
+    return formatDate(wednesday);
   };
 
   // Create form with default values
@@ -219,18 +231,6 @@ export default function WeeklyTimeEntryForm({
       total_misc_reimbursement: 0,
       total_misc_hours: 0,
       misc_hours_type: "",
-      monday: {
-        worked: true,
-        time_in: "08:00", 
-        time_out: "17:00",
-        lunch_minutes: 30,
-      },
-      tuesday: {
-        worked: true,
-        time_in: "08:00", 
-        time_out: "17:00",
-        lunch_minutes: 30,
-      },
       wednesday: {
         worked: true,
         time_in: "08:00", 
@@ -257,6 +257,18 @@ export default function WeeklyTimeEntryForm({
       },
       sunday: {
         worked: false,
+        time_in: "08:00", 
+        time_out: "17:00",
+        lunch_minutes: 30,
+      },
+      monday: {
+        worked: true,
+        time_in: "08:00", 
+        time_out: "17:00",
+        lunch_minutes: 30,
+      },
+      tuesday: {
+        worked: true,
         time_in: "08:00", 
         time_out: "17:00",
         lunch_minutes: 30,
@@ -406,7 +418,7 @@ export default function WeeklyTimeEntryForm({
                 name="week_start_date"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Week Starting (Monday)</FormLabel>
+                    <FormLabel>Payroll Week Starting (Wednesday)</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>
@@ -418,7 +430,17 @@ export default function WeeklyTimeEntryForm({
 
             <div className="border rounded-md p-0 mb-4">
               <Table>
-                <TableCaption>Regular Hours for week of {form.watch("week_start_date")}</TableCaption>
+                <TableCaption>Payroll Period: {form.watch("week_start_date")} (Wed) through {
+                  (() => {
+                    const startDate = form.watch("week_start_date");
+                    if (startDate) {
+                      const endDate = new Date(startDate);
+                      endDate.setDate(endDate.getDate() + 6);
+                      return format(endDate, "yyyy-MM-dd");
+                    }
+                    return "";
+                  })()
+                } (Tue)</TableCaption>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[80px]">Day</TableHead>

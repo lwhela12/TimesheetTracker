@@ -381,17 +381,10 @@ export default function TimesheetEntry() {
             </div>
             <div className="flex gap-2 mt-4 md:mt-0">
               <Button 
-                onClick={handleAddTimeEntry}
-              >
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Add Entry
-              </Button>
-              <Button 
                 onClick={handleAddWeeklyTimesheet}
-                variant="outline"
               >
                 <CalendarRange className="mr-2 h-4 w-4" />
-                Weekly Entry
+                New Weekly Timesheet
               </Button>
             </div>
           </div>
