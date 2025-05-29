@@ -509,10 +509,11 @@ export default function WeeklyTimeEntryForm({
                             render={({ field }) => (
                               <FormControl>
                                 <Input 
-                                  type="number" 
-                                  min="0" 
-                                  step="5" 
-                                  className="w-full"
+                                  type="text" 
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  className="w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  placeholder="30"
                                   {...field} 
                                   disabled={!form.watch(`${dayKey}.worked` as any)}
                                 />
@@ -527,10 +528,11 @@ export default function WeeklyTimeEntryForm({
                             render={({ field }) => (
                               <FormControl>
                                 <Input 
-                                  type="number" 
-                                  min="0" 
-                                  step="1" 
-                                  className="w-full"
+                                  type="text" 
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  className="w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  placeholder="0"
                                   {...field} 
                                   disabled={!form.watch(`${dayKey}.worked` as any)}
                                 />
@@ -606,7 +608,14 @@ export default function WeeklyTimeEntryForm({
                     <FormItem>
                       <FormLabel>PTO Hours</FormLabel>
                       <FormControl>
-                        <Input type="number" min="0" step="0.5" {...field} />
+                        <Input 
+                          type="text" 
+                          inputMode="decimal"
+                          pattern="[0-9]*\.?[0-9]*"
+                          className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          placeholder="0"
+                          {...field} 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

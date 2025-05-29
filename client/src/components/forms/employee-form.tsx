@@ -28,6 +28,7 @@ const employeeFormSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
   last_name: z.string().min(1, "Last name is required"),
   rate: z.coerce.number().min(0.01, "Hourly rate must be greater than 0"),
+  hire_date: z.string().min(1, "Hire date is required"),
   active: z.boolean().default(true),
 });
 
@@ -54,6 +55,7 @@ export default function EmployeeForm({
       first_name: initialData?.first_name || "",
       last_name: initialData?.last_name || "",
       rate: initialData?.rate || 15.00,
+      hire_date: initialData?.hire_date || new Date().toISOString().split('T')[0],
       active: initialData?.active !== undefined ? initialData.active : true,
     },
   });
@@ -65,6 +67,7 @@ export default function EmployeeForm({
         first_name: initialData.first_name || "",
         last_name: initialData.last_name || "",
         rate: initialData.rate || 15.00,
+        hire_date: initialData.hire_date || new Date().toISOString().split('T')[0],
         active: initialData.active !== undefined ? initialData.active : true,
       });
     }
@@ -125,6 +128,23 @@ export default function EmployeeForm({
                       min="0.01" 
                       step="0.01" 
                       placeholder="15.00" 
+                      {...field} 
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="hire_date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Hire Date</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="date" 
                       {...field} 
                     />
                   </FormControl>
