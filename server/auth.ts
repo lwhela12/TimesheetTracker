@@ -46,11 +46,24 @@ export function setupAuth(app: Express) {
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {
-      const user = await storage.getUserByUsername(username);
-      if (!user || !(await comparePasswords(password, user.password))) {
-        return done(null, false);
-      } else {
+      try {
+        const user = await storage.getUserByUsername(username.trim());
+        if (!user) {
+          console.log(`Login attempt failed: User '${username}' not found`);
+          return done(null, false);
+        }
+        
+        const passwordMatch = await comparePasswords(password, user.password);
+        if (!passwordMatch) {
+          console.log(`Login attempt failed: Invalid password for user '${username}'`);
+          return done(null, false);
+        }
+        
+        console.log(`Login successful for user '${username}'`);
         return done(null, user);
+      } catch (error) {
+        console.error('Login error:', error);
+        return done(error);
       }
     }),
   );
@@ -63,22 +76,27 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      const existingUser = await storage.getUserByUsername(req.body.username);
+      const username = req.body.username.trim();
+      const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
         return res.status(400).json({ message: "Username already exists" });
       }
 
       const user = await storage.createUser({
         ...req.body,
+        username,
         password: await hashPassword(req.body.password),
       });
 
+      console.log(`User registered successfully: '${username}'`);
+      
       req.login(user, (err) => {
         if (err) return next(err);
         const { password, ...userWithoutPassword } = user;
         res.status(201).json(userWithoutPassword);
       });
     } catch (error) {
+      console.error('Registration error:', error);
       next(error);
     }
   });
