@@ -44,9 +44,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-// Define days of the week starting with Wednesday (payroll period)
-const DAYS_OF_WEEK = ["Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday"];
-const SHORT_DAYS = ["Wed", "Thu", "Fri", "Sat", "Sun", "Mon", "Tue"];
+// Define days for a two-week payroll period starting with Wednesday
+const DAYS_OF_WEEK = [
+  "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday", // Week 1
+  "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday"  // Week 2
+];
+const SHORT_DAYS = [
+  "Wed", "Thu", "Fri", "Sat", "Sun", "Mon", "Tue", // Week 1
+  "Wed", "Thu", "Fri", "Sat", "Sun", "Mon", "Tue"  // Week 2
+];
 
 // Create a schema for the weekly time entry form
 const weeklyTimeEntryFormSchema = z.object({
@@ -139,10 +145,89 @@ const weeklyTimeEntryFormSchema = z.object({
     misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
     misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
   }),
+  // Week 2 days
+  wednesday2: z.object({
+    worked: z.boolean().default(true),
+    time_in: z.string().optional(),
+    time_out: z.string().optional(),
+    lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
+  }),
+  thursday2: z.object({
+    worked: z.boolean().default(true),
+    time_in: z.string().optional(),
+    time_out: z.string().optional(),
+    lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
+  }),
+  friday2: z.object({
+    worked: z.boolean().default(true),
+    time_in: z.string().optional(),
+    time_out: z.string().optional(),
+    lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
+  }),
+  saturday2: z.object({
+    worked: z.boolean().default(false),
+    time_in: z.string().optional(),
+    time_out: z.string().optional(),
+    lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
+  }),
+  sunday2: z.object({
+    worked: z.boolean().default(false),
+    time_in: z.string().optional(),
+    time_out: z.string().optional(),
+    lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
+  }),
+  monday2: z.object({
+    worked: z.boolean().default(true),
+    time_in: z.string().optional(),
+    time_out: z.string().optional(),
+    lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
+  }),
+  tuesday2: z.object({
+    worked: z.boolean().default(true),
+    time_in: z.string().optional(),
+    time_out: z.string().optional(),
+    lunch_minutes: z.coerce.number().min(0, "Must be 0 or more").default(30),
+    miles: z.coerce.number().min(0, "Must be 0 or more").default(0),
+    pto_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    holiday_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_hours: z.coerce.number().min(0, "Must be 0 or more").optional(),
+    misc_reimbursement: z.coerce.number().min(0, "Must be 0 or more").optional(),
+  }),
 }).refine(
   (data) => {
     // For each day where worked is true, validate that time_in and time_out are provided
-    const days = ["wednesday", "thursday", "friday", "saturday", "sunday", "monday", "tuesday"];
+    const days = ["wednesday", "thursday", "friday", "saturday", "sunday", "monday", "tuesday", 
+                  "wednesday2", "thursday2", "friday2", "saturday2", "sunday2", "monday2", "tuesday2"];
     for (const day of days) {
       const dayData = data[day as keyof typeof data] as { worked: boolean; time_in?: string; time_out?: string };
       if (dayData.worked && (!dayData.time_in || !dayData.time_out)) {
@@ -273,6 +358,49 @@ export default function WeeklyTimeEntryForm({
         time_out: "17:00",
         lunch_minutes: 30,
       },
+      // Week 2 defaults
+      wednesday2: {
+        worked: true,
+        time_in: "08:00", 
+        time_out: "17:00",
+        lunch_minutes: 30,
+      },
+      thursday2: {
+        worked: true,
+        time_in: "08:00", 
+        time_out: "17:00",
+        lunch_minutes: 30,
+      },
+      friday2: {
+        worked: true,
+        time_in: "08:00", 
+        time_out: "17:00",
+        lunch_minutes: 30,
+      },
+      saturday2: {
+        worked: false,
+        time_in: "08:00", 
+        time_out: "17:00",
+        lunch_minutes: 30,
+      },
+      sunday2: {
+        worked: false,
+        time_in: "08:00", 
+        time_out: "17:00",
+        lunch_minutes: 30,
+      },
+      monday2: {
+        worked: true,
+        time_in: "08:00", 
+        time_out: "17:00",
+        lunch_minutes: 30,
+      },
+      tuesday2: {
+        worked: true,
+        time_in: "08:00", 
+        time_out: "17:00",
+        lunch_minutes: 30,
+      },
     },
   });
 
@@ -290,13 +418,24 @@ export default function WeeklyTimeEntryForm({
     const weekStartDate = new Date(values.week_start_date);
     const entries: TimeEntryOutput[] = [];
     
-    // Loop through each day of the week
-    for (let i = 0; i < 7; i++) {
-      const dayKey = DAYS_OF_WEEK[i].toLowerCase() as keyof WeeklyTimeEntryFormValues;
-      const dayInfo = values[dayKey] as any;
+    // Loop through each day of the two-week period (14 days)
+    for (let i = 0; i < 14; i++) {
+      const dayName = DAYS_OF_WEEK[i];
+      let dayKey: string;
+      
+      // Map day names to form field keys
+      if (i < 7) {
+        // First week
+        dayKey = dayName.toLowerCase();
+      } else {
+        // Second week - add "2" suffix
+        dayKey = dayName.toLowerCase() + "2";
+      }
+      
+      const dayInfo = values[dayKey as keyof WeeklyTimeEntryFormValues] as any;
       
       // Only create entries for days marked as worked or with PTO/holiday hours
-      if (dayInfo.worked || dayInfo.pto_hours || dayInfo.holiday_hours || dayInfo.misc_hours) {
+      if (dayInfo && (dayInfo.worked || dayInfo.pto_hours || dayInfo.holiday_hours || dayInfo.misc_hours)) {
         // Calculate the date for this day (weekStartDate + i days)
         const entryDate = addDays(weekStartDate, i);
         
@@ -311,8 +450,8 @@ export default function WeeklyTimeEntryForm({
           
           // Use day-specific fields for each entry
           pto_hours: dayInfo.pto_hours || 0,
-          holiday_worked_hours: dayInfo.holiday_hours || 0, // Using holiday_hours field for worked hours
-          holiday_non_worked_hours: 0, // Not used in new UI
+          holiday_worked_hours: dayInfo.holiday_hours || 0,
+          holiday_non_worked_hours: 0,
           misc_reimbursement: dayInfo.misc_reimbursement || 0,
           misc_hours: dayInfo.misc_hours || 0,
           misc_hours_type: values.misc_hours_type || "",
@@ -441,17 +580,17 @@ export default function WeeklyTimeEntryForm({
 
             <div className="border rounded-md p-0 mb-4">
               <Table>
-                <TableCaption>Payroll Period: {form.watch("week_start_date")} (Wed) through {
+                <TableCaption>Two-Week Payroll Period: {form.watch("week_start_date")} through {
                   (() => {
                     const startDate = form.watch("week_start_date");
                     if (startDate) {
                       const endDate = new Date(startDate);
-                      endDate.setDate(endDate.getDate() + 6);
+                      endDate.setDate(endDate.getDate() + 13); // 14 days total (0-13)
                       return format(endDate, "yyyy-MM-dd");
                     }
                     return "";
                   })()
-                } (Tue)</TableCaption>
+                }</TableCaption>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[80px]">Day</TableHead>
@@ -467,12 +606,21 @@ export default function WeeklyTimeEntryForm({
                 </TableHeader>
                 <TableBody>
                   {DAYS_OF_WEEK.map((day, index) => {
-                    const dayKey = day.toLowerCase() as keyof WeeklyTimeEntryFormValues;
+                    // Map day names to form field keys for two-week period
+                    let dayKey: string;
+                    if (index < 7) {
+                      // First week
+                      dayKey = day.toLowerCase();
+                    } else {
+                      // Second week - add "2" suffix
+                      dayKey = day.toLowerCase() + "2";
+                    }
+                    
                     const dateForDay = getFormattedDateForDay(form.watch("week_start_date"), index);
                     const actualDayName = getActualDayName(form.watch("week_start_date"), index);
                     
                     return (
-                      <TableRow key={day}>
+                      <TableRow key={`${day}-${index}`}>
                         <TableCell className="font-medium">{actualDayName}</TableCell>
                         <TableCell>{dateForDay}</TableCell>
                         <TableCell className="text-center">
@@ -480,7 +628,7 @@ export default function WeeklyTimeEntryForm({
                             id={`${day.toLowerCase()}-worked`}
                             checked={form.watch(`${dayKey}.worked` as any)}
                             onCheckedChange={(checked) => 
-                              handleWorkedChange(day, checked as boolean)
+                              handleWorkedChange(dayKey, checked as boolean)
                             }
                           />
                         </TableCell>
