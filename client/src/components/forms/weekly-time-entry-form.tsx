@@ -517,18 +517,34 @@ export default function WeeklyTimeEntryForm({
   };
 
   // Function to handle the worked checkbox
-  const handleWorkedChange = (day: string, worked: boolean) => {
-    const dayKey = day.toLowerCase() as keyof WeeklyTimeEntryFormValues;
+  const handleWorkedChange = (dayKey: string, worked: boolean) => {
     form.setValue(`${dayKey}.worked` as any, worked);
+    
+    // If marking as not worked, clear time fields but preserve other values
+    if (!worked) {
+      form.setValue(`${dayKey}.time_in` as any, "");
+      form.setValue(`${dayKey}.time_out` as any, "");
+    } else {
+      // If marking as worked, set default times if empty
+      const currentTimeIn = form.getValues(`${dayKey}.time_in` as any);
+      const currentTimeOut = form.getValues(`${dayKey}.time_out` as any);
+      
+      if (!currentTimeIn) {
+        form.setValue(`${dayKey}.time_in` as any, "08:00");
+      }
+      if (!currentTimeOut) {
+        form.setValue(`${dayKey}.time_out` as any, "17:00");
+      }
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Weekly Timesheet Entry</DialogTitle>
+          <DialogTitle>Two-Week Timesheet Entry</DialogTitle>
           <DialogDescription>
-            Enter timesheet data for the entire week at once
+            Enter timesheet data for the entire two-week payroll period at once
           </DialogDescription>
         </DialogHeader>
 
@@ -568,7 +584,7 @@ export default function WeeklyTimeEntryForm({
                 name="week_start_date"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Payroll Week Starting (Wednesday)</FormLabel>
+                    <FormLabel>Two-Week Pay Period Start (Wednesday)</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>
