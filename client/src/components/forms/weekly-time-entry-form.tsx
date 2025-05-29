@@ -350,6 +350,17 @@ export default function WeeklyTimeEntryForm({
     }
   };
 
+  // Get the actual day name for a given date
+  const getActualDayName = (weekStartDate: string, dayIndex: number) => {
+    try {
+      const startDate = new Date(weekStartDate);
+      const dayDate = addDays(startDate, dayIndex);
+      return format(dayDate, "EEEE"); // Full day name (e.g., "Wednesday")
+    } catch (error) {
+      return DAYS_OF_WEEK[dayIndex]; // Fallback to default
+    }
+  };
+
   // Calculate daily hours
   const getDailyHours = (timeIn: string, timeOut: string, lunchMinutes: number) => {
     if (!timeIn || !timeOut || !form) return { regularHours: 0, overtimeHours: 0 };
@@ -458,10 +469,11 @@ export default function WeeklyTimeEntryForm({
                   {DAYS_OF_WEEK.map((day, index) => {
                     const dayKey = day.toLowerCase() as keyof WeeklyTimeEntryFormValues;
                     const dateForDay = getFormattedDateForDay(form.watch("week_start_date"), index);
+                    const actualDayName = getActualDayName(form.watch("week_start_date"), index);
                     
                     return (
                       <TableRow key={day}>
-                        <TableCell className="font-medium">{day}</TableCell>
+                        <TableCell className="font-medium">{actualDayName}</TableCell>
                         <TableCell>{dateForDay}</TableCell>
                         <TableCell className="text-center">
                           <Checkbox
@@ -629,7 +641,14 @@ export default function WeeklyTimeEntryForm({
                     <FormItem>
                       <FormLabel>Misc. Reimbursement ($)</FormLabel>
                       <FormControl>
-                        <Input type="number" min="0" step="0.01" {...field} />
+                        <Input 
+                          type="text" 
+                          inputMode="decimal"
+                          pattern="[0-9]*\.?[0-9]*"
+                          className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          placeholder="0.00"
+                          {...field} 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -645,7 +664,14 @@ export default function WeeklyTimeEntryForm({
                     <FormItem>
                       <FormLabel>Holiday Worked Hours</FormLabel>
                       <FormControl>
-                        <Input type="number" min="0" step="0.5" {...field} />
+                        <Input 
+                          type="text" 
+                          inputMode="decimal"
+                          pattern="[0-9]*\.?[0-9]*"
+                          className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          placeholder="0"
+                          {...field} 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -659,7 +685,14 @@ export default function WeeklyTimeEntryForm({
                     <FormItem>
                       <FormLabel>Holiday Non-Worked Hours</FormLabel>
                       <FormControl>
-                        <Input type="number" min="0" step="0.5" {...field} />
+                        <Input 
+                          type="text" 
+                          inputMode="decimal"
+                          pattern="[0-9]*\.?[0-9]*"
+                          className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          placeholder="0"
+                          {...field} 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -675,7 +708,14 @@ export default function WeeklyTimeEntryForm({
                     <FormItem>
                       <FormLabel>Misc. Hours</FormLabel>
                       <FormControl>
-                        <Input type="number" min="0" step="0.5" {...field} />
+                        <Input 
+                          type="text" 
+                          inputMode="decimal"
+                          pattern="[0-9]*\.?[0-9]*"
+                          className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          placeholder="0"
+                          {...field} 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
