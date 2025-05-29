@@ -10,17 +10,37 @@ import Employees from "@/pages/employees";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import AuthPage from "@/pages/auth-page";
-import { ProtectedRoute } from "./lib/protected-route";
+import { ProtectedPage } from "./lib/protected-page";
 import { AuthProvider } from "@/hooks/use-auth";
 
 function Router() {
   return (
     <Switch>
-      <ProtectedRoute path="/" component={Dashboard} />
-      <ProtectedRoute path="/timesheet-entry" component={TimesheetEntry} />
-      <ProtectedRoute path="/employees" component={Employees} />
-      <ProtectedRoute path="/reports" component={Reports} />
-      <ProtectedRoute path="/settings" component={Settings} />
+      <Route path="/">
+        <ProtectedPage>
+          <Dashboard />
+        </ProtectedPage>
+      </Route>
+      <Route path="/timesheet-entry">
+        <ProtectedPage>
+          <TimesheetEntry />
+        </ProtectedPage>
+      </Route>
+      <Route path="/employees">
+        <ProtectedPage>
+          <Employees />
+        </ProtectedPage>
+      </Route>
+      <Route path="/reports">
+        <ProtectedPage>
+          <Reports />
+        </ProtectedPage>
+      </Route>
+      <Route path="/settings">
+        <ProtectedPage>
+          <Settings />
+        </ProtectedPage>
+      </Route>
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
