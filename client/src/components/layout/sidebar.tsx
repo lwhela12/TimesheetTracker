@@ -34,7 +34,7 @@ export default function Sidebar() {
     },
     {
       name: "Timesheet Entry",
-      href: "/timesheet",
+      href: "/timesheet-entry",
       icon: <Clock className="h-5 w-5" />,
     },
     {
