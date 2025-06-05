@@ -2,18 +2,30 @@ import { pgTable, text, serial, integer, boolean, timestamp, doublePrecision, va
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Company/Organization table
+export const companies = pgTable("companies", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  address: text("address"),
+  phone: varchar("phone", { length: 20 }),
+  email: varchar("email", { length: 100 }),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
 // User table for authentication
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   role: text("role").notNull().default("clerk"),
+  company_id: integer("company_id").notNull().references(() => companies.id),
   created_at: timestamp("created_at").defaultNow(),
 });
 
 // Employee table 
 export const employees = pgTable("employees", {
   id: serial("id").primaryKey(),
+  company_id: integer("company_id").notNull().references(() => companies.id),
   first_name: varchar("first_name", { length: 50 }).notNull(),
   last_name: varchar("last_name", { length: 50 }).notNull(),
   rate: doublePrecision("rate").notNull(), // Hourly rate
@@ -80,19 +92,29 @@ export const audit_logs = pgTable("audit_logs", {
 // Settings table
 export const settings = pgTable("settings", {
   id: serial("id").primaryKey(),
-  key: text("key").notNull().unique(),
+  company_id: integer("company_id").notNull().references(() => companies.id),
+  key: text("key").notNull(),
   value: text("value").notNull(),
   updated_at: timestamp("updated_at").defaultNow(),
 });
 
 // Zod schemas for insert operations
+export const insertCompanySchema = createInsertSchema(companies).pick({
+  name: true,
+  address: true,
+  phone: true,
+  email: true,
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
   role: true,
+  company_id: true,
 });
 
 export const insertEmployeeSchema = createInsertSchema(employees).pick({
+  company_id: true,
   first_name: true,
   last_name: true,
   rate: true,
@@ -147,11 +169,15 @@ export const insertAuditLogSchema = createInsertSchema(audit_logs).pick({
 });
 
 export const insertSettingSchema = createInsertSchema(settings).pick({
+  company_id: true,
   key: true,
   value: true,
 });
 
 // Types
+export type InsertCompany = z.infer<typeof insertCompanySchema>;
+export type Company = typeof companies.$inferSelect;
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
