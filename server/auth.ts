@@ -82,9 +82,26 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "Username already exists" });
       }
 
+      // Get or create default company
+      let defaultCompany;
+      try {
+        defaultCompany = await storage.getCompany(1);
+        if (!defaultCompany) {
+          defaultCompany = await storage.createCompany({
+            name: "Default Company",
+            address: "123 Main Street",
+            phone: "555-0123",
+            email: "admin@company.com"
+          });
+        }
+      } catch (error) {
+        return res.status(500).json({ message: "Failed to setup company" });
+      }
+
       const user = await storage.createUser({
         ...req.body,
         username,
+        company_id: defaultCompany.id,
         password: await hashPassword(req.body.password),
       });
 
