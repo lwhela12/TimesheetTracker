@@ -12,8 +12,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Employee routes
   app.get("/api/employees", async (req, res) => {
     try {
+      if (!req.isAuthenticated() || !req.user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
       const filter = req.query.active ? { active: req.query.active === 'true' } : undefined;
-      const employees = await storage.getEmployees(filter);
+      const employees = await storage.getEmployees(req.user.company_id, filter);
       res.json(employees);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch employees" });
@@ -22,7 +25,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/employees/:id", async (req, res) => {
     try {
-      const employee = await storage.getEmployee(Number(req.params.id));
+      if (!req.isAuthenticated() || !req.user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const employee = await storage.getEmployee(Number(req.params.id), req.user.company_id);
       if (!employee) {
         return res.status(404).json({ message: "Employee not found" });
       }
@@ -34,7 +40,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employees", async (req, res) => {
     try {
-      const validatedData = insertEmployeeSchema.parse(req.body);
+      if (!req.isAuthenticated() || !req.user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const validatedData = insertEmployeeSchema.parse({
+        ...req.body,
+        company_id: req.user.company_id
+      });
       const newEmployee = await storage.createEmployee(validatedData);
       
       // Log audit
@@ -60,8 +72,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/employees/:id", async (req, res) => {
     try {
+      if (!req.isAuthenticated() || !req.user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
       const id = Number(req.params.id);
-      const existingEmployee = await storage.getEmployee(id);
+      const existingEmployee = await storage.getEmployee(id, req.user.company_id);
       
       if (!existingEmployee) {
         return res.status(404).json({ message: "Employee not found" });

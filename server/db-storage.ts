@@ -39,16 +39,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Employee operations
-  async getEmployee(id: number): Promise<Employee | undefined> {
-    const [employee] = await db.select().from(employees).where(eq(employees.id, id));
+  async getEmployee(id: number, company_id: number): Promise<Employee | undefined> {
+    const [employee] = await db.select().from(employees).where(
+      and(eq(employees.id, id), eq(employees.company_id, company_id))
+    );
     return employee || undefined;
   }
 
-  async getEmployees(filter?: { active?: boolean }): Promise<Employee[]> {
-    let query = db.select().from(employees);
+  async getEmployees(company_id: number, filter?: { active?: boolean }): Promise<Employee[]> {
+    let query = db.select().from(employees).where(eq(employees.company_id, company_id));
     
     if (filter?.active !== undefined) {
-      query = query.where(eq(employees.active, filter.active));
+      query = query.where(and(eq(employees.company_id, company_id), eq(employees.active, filter.active)));
     }
     
     return await query;
