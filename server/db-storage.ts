@@ -1,9 +1,9 @@
 import { IStorage } from "./storage";
 import { db } from "./db";
 import { 
-  users, employees, punches, payroll_calcs, audit_logs, settings,
-  User, Employee, Punch, PayrollCalc, AuditLog, Setting,
-  InsertUser, InsertEmployee, InsertPunch, InsertPayrollCalc, InsertAuditLog
+  users, employees, punches, payroll_calcs, audit_logs, settings, companies,
+  User, Employee, Punch, PayrollCalc, AuditLog, Setting, Company,
+  InsertUser, InsertEmployee, InsertPunch, InsertPayrollCalc, InsertAuditLog, InsertCompany
 } from "@shared/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import session from "express-session";
@@ -20,6 +20,17 @@ export class DatabaseStorage implements IStorage {
       pool, 
       createTableIfMissing: true 
     });
+  }
+
+  // Company operations
+  async getCompany(id: number): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    return company || undefined;
+  }
+
+  async createCompany(company: InsertCompany): Promise<Company> {
+    const [newCompany] = await db.insert(companies).values(company).returning();
+    return newCompany;
   }
 
   // User operations
@@ -61,27 +72,32 @@ export class DatabaseStorage implements IStorage {
     return newEmployee;
   }
 
-  async updateEmployee(id: number, employee: Partial<InsertEmployee>): Promise<Employee | undefined> {
+  async updateEmployee(id: number, employee: Partial<InsertEmployee>, company_id: number): Promise<Employee | undefined> {
     const [updatedEmployee] = await db
       .update(employees)
       .set(employee)
-      .where(eq(employees.id, id))
+      .where(and(eq(employees.id, id), eq(employees.company_id, company_id)))
       .returning();
     return updatedEmployee || undefined;
   }
 
-  async deleteEmployee(id: number): Promise<boolean> {
-    const result = await db.delete(employees).where(eq(employees.id, id));
-    return result.rowCount > 0;
+  async deleteEmployee(id: number, company_id: number): Promise<boolean> {
+    const result = await db.delete(employees).where(
+      and(eq(employees.id, id), eq(employees.company_id, company_id))
+    );
+    return (result.rowCount || 0) > 0;
   }
 
   // Punch operations
-  async getPunch(id: number): Promise<Punch | undefined> {
-    const [punch] = await db.select().from(punches).where(eq(punches.id, id));
-    return punch || undefined;
+  async getPunch(id: number, company_id: number): Promise<Punch | undefined> {
+    const [punch] = await db.select()
+      .from(punches)
+      .innerJoin(employees, eq(punches.employee_id, employees.id))
+      .where(and(eq(punches.id, id), eq(employees.company_id, company_id)));
+    return punch?.punches || undefined;
   }
 
-  async getPunches(filter?: { 
+  async getPunches(company_id: number, filter?: { 
     employee_id?: number, 
     from_date?: Date, 
     to_date?: Date,

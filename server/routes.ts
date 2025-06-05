@@ -83,7 +83,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const validatedData = insertEmployeeSchema.partial().parse(req.body);
-      const updatedEmployee = await storage.updateEmployee(id, validatedData);
+      const updatedEmployee = await storage.updateEmployee(id, validatedData, req.user.company_id);
       
       // Log audit for each changed field
       if (req.user && updatedEmployee) {
@@ -112,14 +112,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/employees/:id", async (req, res) => {
     try {
+      if (!req.isAuthenticated() || !req.user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
       const id = Number(req.params.id);
-      const existingEmployee = await storage.getEmployee(id);
+      const existingEmployee = await storage.getEmployee(id, req.user.company_id);
       
       if (!existingEmployee) {
         return res.status(404).json({ message: "Employee not found" });
       }
       
-      await storage.deleteEmployee(id);
+      await storage.deleteEmployee(id, req.user.company_id);
       
       // Log audit
       if (req.user) {
