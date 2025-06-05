@@ -758,10 +758,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const endDate = new Date(req.query.end_date as string);
 
       // Get all active employees
-      const employees = await storage.getEmployees({ active: true });
+      const employees = await storage.getEmployees(req.user.company_id, { active: true });
 
       // Get all punches for the period
-      const punches = await storage.getPunches({
+      const punches = await storage.getPunches(req.user.company_id, {
         from_date: startDate,
         to_date: endDate
       });
@@ -848,8 +848,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      const mileageRate = await storage.getSetting('mileage_rate');
-      const otThreshold = await storage.getSetting('ot_threshold');
+      const mileageRate = await storage.getSetting(req.user.company_id, 'mileage_rate');
+      const otThreshold = await storage.getSetting(req.user.company_id, 'ot_threshold');
       
       res.json({
         mileage_rate: mileageRate?.value || '0.30',
@@ -881,7 +881,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "Invalid mileage rate" });
         }
         
-        const updated = await storage.updateSetting('mileage_rate', String(parsedRate));
+        const updated = await storage.updateSetting(req.user.company_id, 'mileage_rate', String(parsedRate));
         updatedSettings.mileage_rate = updated;
       }
       
@@ -891,7 +891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "Invalid overtime threshold" });
         }
         
-        const updated = await storage.updateSetting('ot_threshold', String(parsedThreshold));
+        const updated = await storage.updateSetting(req.user.company_id, 'ot_threshold', String(parsedThreshold));
         updatedSettings.ot_threshold = updated;
       }
       
