@@ -1,4 +1,5 @@
 import { 
+  companies, type Company, type InsertCompany,
   users, type User, type InsertUser, 
   employees, type Employee, type InsertEmployee,
   punches, type Punch, type InsertPunch, 
@@ -19,36 +20,40 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   
+  // Company operations
+  getCompany(id: number): Promise<Company | undefined>;
+  createCompany(company: InsertCompany): Promise<Company>;
+  
   // Employee operations
-  getEmployee(id: number): Promise<Employee | undefined>;
-  getEmployees(filter?: { active?: boolean }): Promise<Employee[]>;
+  getEmployee(id: number, company_id: number): Promise<Employee | undefined>;
+  getEmployees(company_id: number, filter?: { active?: boolean }): Promise<Employee[]>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
-  updateEmployee(id: number, employee: Partial<InsertEmployee>): Promise<Employee | undefined>;
-  deleteEmployee(id: number): Promise<boolean>;
+  updateEmployee(id: number, employee: Partial<InsertEmployee>, company_id: number): Promise<Employee | undefined>;
+  deleteEmployee(id: number, company_id: number): Promise<boolean>;
   
   // Punch operations
-  getPunch(id: number): Promise<Punch | undefined>;
-  getPunches(filter?: { 
+  getPunch(id: number, company_id: number): Promise<Punch | undefined>;
+  getPunches(company_id: number, filter?: { 
     employee_id?: number, 
     from_date?: Date, 
     to_date?: Date,
     status?: string
   }): Promise<Punch[]>;
   createPunch(punch: InsertPunch): Promise<Punch>;
-  updatePunch(id: number, punch: Partial<InsertPunch>): Promise<Punch | undefined>;
-  deletePunch(id: number): Promise<boolean>;
+  updatePunch(id: number, punch: Partial<InsertPunch>, company_id: number): Promise<Punch | undefined>;
+  deletePunch(id: number, company_id: number): Promise<boolean>;
   
   // Payroll calculation operations
   calculatePayroll(punch_id: number): Promise<PayrollCalc>;
-  getPayrollReport(from_date: Date, to_date: Date): Promise<Array<Punch & { employee: Employee, payroll: PayrollCalc }>>;
+  getPayrollReport(company_id: number, from_date: Date, to_date: Date): Promise<Array<Punch & { employee: Employee, payroll: PayrollCalc }>>;
   
   // Audit log operations
   addAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(filter?: { table_name?: string, row_id?: number }): Promise<AuditLog[]>;
   
   // Settings operations
-  getSetting(key: string): Promise<Setting | undefined>;
-  updateSetting(key: string, value: string): Promise<Setting>;
+  getSetting(company_id: number, key: string): Promise<Setting | undefined>;
+  updateSetting(company_id: number, key: string, value: string): Promise<Setting>;
   
   // Session store
   sessionStore: session.SessionStore;
