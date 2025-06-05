@@ -501,7 +501,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       fourWeeksAgo.setDate(mondayThisWeek.getDate() - 28);
       
       // Get this week's data
-      const thisWeekReport = await storage.getPayrollReport(mondayThisWeek, sundayThisWeek);
+      const thisWeekReport = await storage.getPayrollReport(req.user.company_id, mondayThisWeek, sundayThisWeek);
       
       // Get previous week's data for comparison
       const mondayLastWeek = new Date(mondayThisWeek);
@@ -511,7 +511,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       sundayLastWeek.setDate(mondayLastWeek.getDate() + 6);
       sundayLastWeek.setHours(23, 59, 59, 999);
       
-      const lastWeekReport = await storage.getPayrollReport(mondayLastWeek, sundayLastWeek);
+      const lastWeekReport = await storage.getPayrollReport(req.user.company_id, mondayLastWeek, sundayLastWeek);
       
       // Get weekly data for chart
       const weeklyData = [];
@@ -523,7 +523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         weekEnd.setDate(weekStart.getDate() + 6);
         weekEnd.setHours(23, 59, 59, 999);
         
-        const weekReport = await storage.getPayrollReport(weekStart, weekEnd);
+        const weekReport = await storage.getPayrollReport(req.user.company_id, weekStart, weekEnd);
         
         let regularPay = 0;
         let overtimePay = 0;
@@ -661,10 +661,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const endDate = new Date(req.query.end_date as string);
 
       // Get all active employees
-      const employees = await storage.getEmployees({ active: true });
+      const employees = await storage.getEmployees(req.user.company_id, { active: true });
 
       // Get all punches for the period
-      const punches = await storage.getPunches({
+      const punches = await storage.getPunches(req.user.company_id, {
         from_date: startDate,
         to_date: endDate
       });

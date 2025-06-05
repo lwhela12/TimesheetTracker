@@ -256,12 +256,12 @@ export default function Dashboard() {
               <h2 className="text-2xl font-semibold text-neutral-900">Dashboard</h2>
               <p className="text-neutral-500">Overview of payroll and timesheet data</p>
             </div>
-            <button
+            <Button
               onClick={() => window.location.href = '/payroll-entry'}
               className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md font-medium transition-colors"
             >
               Weekly Payroll
-            </button>
+            </Button>
           </div>
 
           {isDashboardLoading ? (
