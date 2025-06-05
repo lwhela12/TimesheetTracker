@@ -168,12 +168,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filter.status = req.query.status as string;
       }
       
-      const punches = await storage.getPunches(filter);
+      const punches = await storage.getPunches(req.user.company_id, filter);
       
       // Enrich punch data with employee info
       const enrichedPunches = await Promise.all(
         punches.map(async (punch) => {
-          const employee = await storage.getEmployee(punch.employee_id);
+          const employee = await storage.getEmployee(punch.employee_id, req.user.company_id);
           return {
             ...punch,
             employee: employee || { id: punch.employee_id, first_name: "Unknown", last_name: "Employee" }
@@ -546,7 +546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Get active employees count
-      const activeEmployees = await storage.getEmployees({ active: true });
+      const activeEmployees = await storage.getEmployees(req.user.company_id, { active: true });
       
       // Calculate metrics
       const totalPayThisWeek = thisWeekReport.reduce((sum, entry) => 
@@ -562,10 +562,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sum + entry.payroll.ot_hours, 0);
       
       const totalMilesThisWeek = thisWeekReport.reduce((sum, entry) => 
-        sum + entry.miles, 0);
+        sum + (entry.miles || 0), 0);
       
       const totalMilesLastWeek = lastWeekReport.reduce((sum, entry) => 
-        sum + entry.miles, 0);
+        sum + (entry.miles || 0), 0);
       
       // Calculate trends (as percentages)
       const payTrend = totalPayLastWeek === 0 ? 0 : 
@@ -605,14 +605,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .slice(0, 5); // Top 5
       
       // Get recent timesheet entries
-      const recentEntries = await storage.getPunches();
+      const recentEntries = await storage.getPunches(req.user.company_id);
       recentEntries.sort((a, b) => {
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        return new Date(b.created_at || new Date()).getTime() - new Date(a.created_at || new Date()).getTime();
       });
       
       const enrichedRecentEntries = await Promise.all(
         recentEntries.slice(0, 5).map(async (punch) => {
-          const employee = await storage.getEmployee(punch.employee_id);
+          const employee = await storage.getEmployee(punch.employee_id, req.user.company_id);
           let payroll;
           try {
             payroll = await storage.calculatePayroll(punch.id);
