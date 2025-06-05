@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import TimesheetEntry from "@/pages/timesheet-entry";
+import PayrollEntry from "@/pages/payroll-entry";
 import Employees from "@/pages/employees";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
@@ -24,6 +25,11 @@ function Router() {
       <Route path="/timesheet-entry">
         <ProtectedPage>
           <TimesheetEntry />
+        </ProtectedPage>
+      </Route>
+      <Route path="/payroll-entry">
+        <ProtectedPage>
+          <PayrollEntry />
         </ProtectedPage>
       </Route>
       <Route path="/employees">

@@ -18,6 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
   DollarSign,
   Clock,
@@ -250,9 +251,17 @@ export default function Dashboard() {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <main className="flex-1 overflow-y-auto p-6">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-neutral-900">Dashboard</h2>
-            <p className="text-neutral-500">Overview of payroll and timesheet data</p>
+          <div className="mb-6 flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-semibold text-neutral-900">Dashboard</h2>
+              <p className="text-neutral-500">Overview of payroll and timesheet data</p>
+            </div>
+            <button
+              onClick={() => window.location.href = '/payroll-entry'}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md font-medium transition-colors"
+            >
+              Weekly Payroll
+            </button>
           </div>
 
           {isDashboardLoading ? (
