@@ -402,6 +402,72 @@ function EmployeeDetailView({
   punches: any[];
   periodStart: string;
 }) {
+  const { toast } = useToast();
+  const [editingPunches, setEditingPunches] = useState<{[key: string]: any}>({});
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Initialize editing state with existing punch data
+  React.useEffect(() => {
+    const initialState: {[key: string]: any} = {};
+    punches.forEach(punch => {
+      initialState[punch.date] = { ...punch };
+    });
+    setEditingPunches(initialState);
+  }, [punches]);
+
+  // Update punch mutation
+  const updatePunchMutation = useMutation({
+    mutationFn: async (punchData: any) => {
+      if (punchData.id) {
+        const res = await apiRequest("PUT", `/api/punches/${punchData.id}`, punchData);
+        return res.json();
+      } else {
+        const res = await apiRequest("POST", "/api/punches", {
+          ...punchData,
+          employee_id: employee.id
+        });
+        return res.json();
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/punches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll/period"] });
+      toast({
+        title: "Success",
+        description: "Time entry saved successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to save entry: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleFieldChange = (date: string, field: string, value: any) => {
+    setEditingPunches(prev => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        [field]: value,
+        date: date
+      }
+    }));
+    setHasChanges(true);
+  };
+
+  const saveChanges = async () => {
+    const promises = Object.values(editingPunches).map(punch => {
+      if (punch && (punch.time_in || punch.time_out || punch.pto_hours || punch.miles || punch.misc_reimbursement)) {
+        return updatePunchMutation.mutateAsync(punch);
+      }
+    }).filter(Boolean);
+
+    await Promise.all(promises);
+    setHasChanges(false);
+  };
   // Generate 14 days for the two-week period
   const twoWeekDays = Array.from({ length: 14 }, (_, i) => {
     const date = addDays(new Date(periodStart), i);
@@ -418,6 +484,19 @@ function EmployeeDetailView({
 
   return (
     <div className="space-y-6">
+      {/* Save Changes Button */}
+      {hasChanges && (
+        <div className="flex justify-end">
+          <Button 
+            onClick={saveChanges}
+            disabled={updatePunchMutation.isPending}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            {updatePunchMutation.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      )}
+
       {/* Week 1 */}
       <Card>
         <CardHeader>
@@ -439,36 +518,107 @@ function EmployeeDetailView({
                   <TableHead>Holiday Non-Worked</TableHead>
                   <TableHead>Misc Hours</TableHead>
                   <TableHead>Misc Reimb</TableHead>
-                  <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {weekOne.map((day) => (
-                  <TableRow key={day.date}>
-                    <TableCell className="font-medium">{day.dateDisplay}</TableCell>
-                    <TableCell>{day.dayName}</TableCell>
-                    <TableCell>{day.punch?.time_in || '-'}</TableCell>
-                    <TableCell>{day.punch?.time_out || '-'}</TableCell>
-                    <TableCell>{day.punch?.lunch_minutes || '-'}</TableCell>
-                    <TableCell>{day.punch?.miles || '-'}</TableCell>
-                    <TableCell>{day.punch?.pto_hours || '-'}</TableCell>
-                    <TableCell>{day.punch?.holiday_worked_hours || '-'}</TableCell>
-                    <TableCell>{day.punch?.holiday_non_worked_hours || '-'}</TableCell>
-                    <TableCell>{day.punch?.misc_hours || '-'}</TableCell>
-                    <TableCell>{day.punch?.misc_reimbursement ? formatCurrency(day.punch.misc_reimbursement) : '-'}</TableCell>
-                    <TableCell>
-                      {day.punch ? (
-                        <Badge variant="default" className="bg-green-100 text-green-800">
-                          {day.punch.status || 'Entered'}
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-gray-100 text-gray-800">
-                          No Entry
-                        </Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {weekOne.map((day) => {
+                  const editingPunch = editingPunches[day.date] || {};
+                  return (
+                    <TableRow key={day.date}>
+                      <TableCell className="font-medium">{day.dateDisplay}</TableCell>
+                      <TableCell>{day.dayName}</TableCell>
+                      <TableCell>
+                        <Input
+                          type="time"
+                          value={editingPunch.time_in || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'time_in', e.target.value)}
+                          className="w-20 text-xs"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="time"
+                          value={editingPunch.time_out || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'time_out', e.target.value)}
+                          className="w-20 text-xs"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={editingPunch.lunch_minutes || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'lunch_minutes', parseInt(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                          max="480"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingPunch.miles || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'miles', parseFloat(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingPunch.pto_hours || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'pto_hours', parseFloat(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                          max="8"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingPunch.holiday_worked_hours || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'holiday_worked_hours', parseFloat(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                          max="8"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingPunch.holiday_non_worked_hours || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'holiday_non_worked_hours', parseFloat(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                          max="8"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingPunch.misc_hours || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'misc_hours', parseFloat(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editingPunch.misc_reimbursement || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'misc_reimbursement', parseFloat(e.target.value) || null)}
+                          className="w-20 text-xs"
+                          min="0"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -496,36 +646,107 @@ function EmployeeDetailView({
                   <TableHead>Holiday Non-Worked</TableHead>
                   <TableHead>Misc Hours</TableHead>
                   <TableHead>Misc Reimb</TableHead>
-                  <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {weekTwo.map((day) => (
-                  <TableRow key={day.date}>
-                    <TableCell className="font-medium">{day.dateDisplay}</TableCell>
-                    <TableCell>{day.dayName}</TableCell>
-                    <TableCell>{day.punch?.time_in || '-'}</TableCell>
-                    <TableCell>{day.punch?.time_out || '-'}</TableCell>
-                    <TableCell>{day.punch?.lunch_minutes || '-'}</TableCell>
-                    <TableCell>{day.punch?.miles || '-'}</TableCell>
-                    <TableCell>{day.punch?.pto_hours || '-'}</TableCell>
-                    <TableCell>{day.punch?.holiday_worked_hours || '-'}</TableCell>
-                    <TableCell>{day.punch?.holiday_non_worked_hours || '-'}</TableCell>
-                    <TableCell>{day.punch?.misc_hours || '-'}</TableCell>
-                    <TableCell>{day.punch?.misc_reimbursement ? formatCurrency(day.punch.misc_reimbursement) : '-'}</TableCell>
-                    <TableCell>
-                      {day.punch ? (
-                        <Badge variant="default" className="bg-green-100 text-green-800">
-                          {day.punch.status || 'Entered'}
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-gray-100 text-gray-800">
-                          No Entry
-                        </Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {weekTwo.map((day) => {
+                  const editingPunch = editingPunches[day.date] || {};
+                  return (
+                    <TableRow key={day.date}>
+                      <TableCell className="font-medium">{day.dateDisplay}</TableCell>
+                      <TableCell>{day.dayName}</TableCell>
+                      <TableCell>
+                        <Input
+                          type="time"
+                          value={editingPunch.time_in || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'time_in', e.target.value)}
+                          className="w-20 text-xs"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="time"
+                          value={editingPunch.time_out || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'time_out', e.target.value)}
+                          className="w-20 text-xs"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={editingPunch.lunch_minutes || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'lunch_minutes', parseInt(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                          max="480"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingPunch.miles || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'miles', parseFloat(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingPunch.pto_hours || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'pto_hours', parseFloat(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                          max="8"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingPunch.holiday_worked_hours || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'holiday_worked_hours', parseFloat(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                          max="8"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingPunch.holiday_non_worked_hours || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'holiday_non_worked_hours', parseFloat(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                          max="8"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={editingPunch.misc_hours || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'misc_hours', parseFloat(e.target.value) || null)}
+                          className="w-16 text-xs"
+                          min="0"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editingPunch.misc_reimbursement || ''}
+                          onChange={(e) => handleFieldChange(day.date, 'misc_reimbursement', parseFloat(e.target.value) || null)}
+                          className="w-20 text-xs"
+                          min="0"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -542,8 +763,8 @@ function EmployeeDetailView({
             <div className="text-center">
               <p className="text-sm text-gray-600">Total Hours</p>
               <p className="text-2xl font-bold">
-                {punches.reduce((sum, p) => {
-                  if (!p.time_in || !p.time_out) return sum;
+                {Object.values(editingPunches).reduce((sum, p) => {
+                  if (!p || !p.time_in || !p.time_out) return sum;
                   const timeIn = new Date(`1970-01-01T${p.time_in}`);
                   const timeOut = new Date(`1970-01-01T${p.time_out}`);
                   const hours = (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60);
@@ -555,19 +776,19 @@ function EmployeeDetailView({
             <div className="text-center">
               <p className="text-sm text-gray-600">PTO Hours</p>
               <p className="text-2xl font-bold">
-                {punches.reduce((sum, p) => sum + (p.pto_hours || 0), 0).toFixed(1)}
+                {Object.values(editingPunches).reduce((sum, p) => sum + (p?.pto_hours || 0), 0).toFixed(1)}
               </p>
             </div>
             <div className="text-center">
               <p className="text-sm text-gray-600">Total Miles</p>
               <p className="text-2xl font-bold">
-                {punches.reduce((sum, p) => sum + (p.miles || 0), 0).toFixed(1)}
+                {Object.values(editingPunches).reduce((sum, p) => sum + (p?.miles || 0), 0).toFixed(1)}
               </p>
             </div>
             <div className="text-center">
               <p className="text-sm text-gray-600">Misc Reimb</p>
               <p className="text-2xl font-bold">
-                {formatCurrency(punches.reduce((sum, p) => sum + (p.misc_reimbursement || 0), 0))}
+                {formatCurrency(Object.values(editingPunches).reduce((sum, p) => sum + (p?.misc_reimbursement || 0), 0))}
               </p>
             </div>
           </div>
