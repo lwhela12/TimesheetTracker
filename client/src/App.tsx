@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
-import TimesheetEntry from "@/pages/timesheet-entry";
+
 import PayrollEntry from "@/pages/payroll-entry";
 import Employees from "@/pages/employees";
 import Reports from "@/pages/reports";
@@ -22,9 +22,10 @@ function Router() {
           <Dashboard />
         </ProtectedPage>
       </Route>
+
       <Route path="/timesheet-entry">
         <ProtectedPage>
-          <TimesheetEntry />
+          <PayrollEntry />
         </ProtectedPage>
       </Route>
       <Route path="/payroll-entry">

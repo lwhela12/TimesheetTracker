@@ -63,6 +63,7 @@ type PayrollPeriod = {
 export default function PayrollEntry() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState(() => {
     // Get next Wednesday as default pay period start
     const today = new Date();
@@ -80,6 +81,19 @@ export default function PayrollEntry() {
       if (!res.ok) throw new Error("Failed to fetch payroll data");
       return res.json();
     },
+  });
+
+  // Fetch detailed punch data for selected employee
+  const { data: employeePunches, isLoading: punchesLoading } = useQuery({
+    queryKey: ["/api/punches", selectedEmployee?.id, selectedPeriod],
+    queryFn: async () => {
+      if (!selectedEmployee) return [];
+      const endDate = format(addDays(new Date(selectedPeriod), 13), "yyyy-MM-dd");
+      const res = await fetch(`/api/punches?employee_id=${selectedEmployee.id}&from_date=${selectedPeriod}&to_date=${endDate}`);
+      if (!res.ok) throw new Error("Failed to fetch punch data");
+      return res.json();
+    },
+    enabled: !!selectedEmployee,
   });
 
   // Export to Excel mutation
@@ -277,7 +291,12 @@ export default function PayrollEntry() {
                         {payrollData?.employees.map((employee) => (
                           <TableRow key={employee.employee_id}>
                             <TableCell className="font-medium">
-                              {employee.employee.first_name} {employee.employee.last_name}
+                              <button
+                                onClick={() => setSelectedEmployee(employee.employee)}
+                                className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                              >
+                                {employee.employee.first_name} {employee.employee.last_name}
+                              </button>
                             </TableCell>
                             <TableCell>
                               {employee.has_entries ? (
@@ -325,6 +344,235 @@ export default function PayrollEntry() {
           </div>
         </div>
       </div>
+
+      {/* Employee Detail Modal */}
+      {selectedEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    {selectedEmployee.first_name} {selectedEmployee.last_name}
+                  </h2>
+                  <p className="text-gray-600">
+                    Two-Week Entry: {formatDate(new Date(selectedPeriod))} - {formatDate(addDays(new Date(selectedPeriod), 13))}
+                  </p>
+                  <p className="text-sm text-gray-500">Rate: {formatCurrency(selectedEmployee.rate)}/hour</p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedEmployee(null)}
+                  className="flex items-center gap-2"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to Summary
+                </Button>
+              </div>
+
+              {punchesLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                    <p className="mt-2 text-sm text-gray-600">Loading time entries...</p>
+                  </div>
+                </div>
+              ) : (
+                <EmployeeDetailView 
+                  employee={selectedEmployee}
+                  punches={employeePunches || []}
+                  periodStart={selectedPeriod}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Employee Detail View Component
+function EmployeeDetailView({ 
+  employee, 
+  punches, 
+  periodStart 
+}: { 
+  employee: Employee;
+  punches: any[];
+  periodStart: string;
+}) {
+  // Generate 14 days for the two-week period
+  const twoWeekDays = Array.from({ length: 14 }, (_, i) => {
+    const date = addDays(new Date(periodStart), i);
+    return {
+      date: format(date, 'yyyy-MM-dd'),
+      dayName: format(date, 'EEEE'),
+      dateDisplay: format(date, 'MMM d'),
+      punch: punches.find(p => p.date === format(date, 'yyyy-MM-dd'))
+    };
+  });
+
+  const weekOne = twoWeekDays.slice(0, 7);
+  const weekTwo = twoWeekDays.slice(7);
+
+  return (
+    <div className="space-y-6">
+      {/* Week 1 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Week 1: {format(new Date(periodStart), 'MMM d')} - {format(addDays(new Date(periodStart), 6), 'MMM d')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Day</TableHead>
+                  <TableHead>Time In</TableHead>
+                  <TableHead>Time Out</TableHead>
+                  <TableHead>Lunch (min)</TableHead>
+                  <TableHead>Miles</TableHead>
+                  <TableHead>PTO Hours</TableHead>
+                  <TableHead>Holiday Worked</TableHead>
+                  <TableHead>Holiday Non-Worked</TableHead>
+                  <TableHead>Misc Hours</TableHead>
+                  <TableHead>Misc Reimb</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {weekOne.map((day) => (
+                  <TableRow key={day.date}>
+                    <TableCell className="font-medium">{day.dateDisplay}</TableCell>
+                    <TableCell>{day.dayName}</TableCell>
+                    <TableCell>{day.punch?.time_in || '-'}</TableCell>
+                    <TableCell>{day.punch?.time_out || '-'}</TableCell>
+                    <TableCell>{day.punch?.lunch_minutes || '-'}</TableCell>
+                    <TableCell>{day.punch?.miles || '-'}</TableCell>
+                    <TableCell>{day.punch?.pto_hours || '-'}</TableCell>
+                    <TableCell>{day.punch?.holiday_worked_hours || '-'}</TableCell>
+                    <TableCell>{day.punch?.holiday_non_worked_hours || '-'}</TableCell>
+                    <TableCell>{day.punch?.misc_hours || '-'}</TableCell>
+                    <TableCell>{day.punch?.misc_reimbursement ? formatCurrency(day.punch.misc_reimbursement) : '-'}</TableCell>
+                    <TableCell>
+                      {day.punch ? (
+                        <Badge variant="default" className="bg-green-100 text-green-800">
+                          {day.punch.status || 'Entered'}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-gray-100 text-gray-800">
+                          No Entry
+                        </Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Week 2 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Week 2: {format(addDays(new Date(periodStart), 7), 'MMM d')} - {format(addDays(new Date(periodStart), 13), 'MMM d')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Day</TableHead>
+                  <TableHead>Time In</TableHead>
+                  <TableHead>Time Out</TableHead>
+                  <TableHead>Lunch (min)</TableHead>
+                  <TableHead>Miles</TableHead>
+                  <TableHead>PTO Hours</TableHead>
+                  <TableHead>Holiday Worked</TableHead>
+                  <TableHead>Holiday Non-Worked</TableHead>
+                  <TableHead>Misc Hours</TableHead>
+                  <TableHead>Misc Reimb</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {weekTwo.map((day) => (
+                  <TableRow key={day.date}>
+                    <TableCell className="font-medium">{day.dateDisplay}</TableCell>
+                    <TableCell>{day.dayName}</TableCell>
+                    <TableCell>{day.punch?.time_in || '-'}</TableCell>
+                    <TableCell>{day.punch?.time_out || '-'}</TableCell>
+                    <TableCell>{day.punch?.lunch_minutes || '-'}</TableCell>
+                    <TableCell>{day.punch?.miles || '-'}</TableCell>
+                    <TableCell>{day.punch?.pto_hours || '-'}</TableCell>
+                    <TableCell>{day.punch?.holiday_worked_hours || '-'}</TableCell>
+                    <TableCell>{day.punch?.holiday_non_worked_hours || '-'}</TableCell>
+                    <TableCell>{day.punch?.misc_hours || '-'}</TableCell>
+                    <TableCell>{day.punch?.misc_reimbursement ? formatCurrency(day.punch.misc_reimbursement) : '-'}</TableCell>
+                    <TableCell>
+                      {day.punch ? (
+                        <Badge variant="default" className="bg-green-100 text-green-800">
+                          {day.punch.status || 'Entered'}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-gray-100 text-gray-800">
+                          No Entry
+                        </Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Summary for this employee */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Two-Week Summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <p className="text-sm text-gray-600">Total Hours</p>
+              <p className="text-2xl font-bold">
+                {punches.reduce((sum, p) => {
+                  if (!p.time_in || !p.time_out) return sum;
+                  const timeIn = new Date(`1970-01-01T${p.time_in}`);
+                  const timeOut = new Date(`1970-01-01T${p.time_out}`);
+                  const hours = (timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60);
+                  const lunchHours = (p.lunch_minutes || 0) / 60;
+                  return sum + Math.max(0, hours - lunchHours);
+                }, 0).toFixed(1)}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-gray-600">PTO Hours</p>
+              <p className="text-2xl font-bold">
+                {punches.reduce((sum, p) => sum + (p.pto_hours || 0), 0).toFixed(1)}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-gray-600">Total Miles</p>
+              <p className="text-2xl font-bold">
+                {punches.reduce((sum, p) => sum + (p.miles || 0), 0).toFixed(1)}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-gray-600">Misc Reimb</p>
+              <p className="text-2xl font-bold">
+                {formatCurrency(punches.reduce((sum, p) => sum + (p.misc_reimbursement || 0), 0))}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
