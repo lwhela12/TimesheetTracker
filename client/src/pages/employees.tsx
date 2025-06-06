@@ -56,6 +56,7 @@ export default function Employees() {
   const { toast } = useToast();
   const [employeeFormOpen, setEmployeeFormOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
   const [showInactive, setShowInactive] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
     null
@@ -70,7 +71,9 @@ export default function Employees() {
     isLoading,
     isError,
   } = useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
+    queryKey: [
+      `/api/employees?page=${page}&limit=10&searchQuery=${encodeURIComponent(searchQuery)}`,
+    ],
   });
 
   // Create employee mutation
@@ -282,8 +285,9 @@ export default function Employees() {
                   </Button>
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-md border">
-                  <Table>
+                <div>
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Name</TableHead>
@@ -341,7 +345,13 @@ export default function Employees() {
                         );
                       })}
                     </TableBody>
-                  </Table>
+                    </Table>
+                  </div>
+                  <div className="flex justify-between items-center mt-4">
+                    <Button variant="outline" onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}>Previous</Button>
+                    <span className="text-sm text-neutral-600">Page {page}</span>
+                    <Button variant="outline" onClick={() => setPage(page + 1)} disabled={employees.length < 10}>Next</Button>
+                  </div>
                 </div>
               )}
             </CardContent>

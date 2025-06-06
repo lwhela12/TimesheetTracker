@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { 
   ArrowDownIcon, 
@@ -16,7 +16,7 @@ type MetricCardProps = {
   iconColor: string;
 };
 
-export default function MetricCard({
+function MetricCard({
   title,
   value,
   trend,
@@ -61,3 +61,5 @@ export default function MetricCard({
     </Card>
   );
 }
+
+export default memo(MetricCard);

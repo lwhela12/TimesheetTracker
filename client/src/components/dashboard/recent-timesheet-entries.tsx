@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -55,7 +55,7 @@ type RecentTimesheetEntriesProps = {
   entriesPerPage: number;
 };
 
-export default function RecentTimesheetEntries({
+function RecentTimesheetEntries({
   entries,
   totalEntries,
   onAddEntry,
@@ -249,3 +249,5 @@ export default function RecentTimesheetEntries({
     </Card>
   );
 }
+
+export default memo(RecentTimesheetEntries);

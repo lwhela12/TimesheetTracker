@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ type OvertimeLeadersProps = {
   onViewAll: () => void;
 };
 
-export default function OvertimeLeaders({ leaders, onViewAll }: OvertimeLeadersProps) {
+function OvertimeLeaders({ leaders, onViewAll }: OvertimeLeadersProps) {
   // Function to get initials from name
   const getInitials = (firstName: string, lastName: string) => {
     return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase();
@@ -107,3 +107,5 @@ export default function OvertimeLeaders({ leaders, onViewAll }: OvertimeLeadersP
     </Card>
   );
 }
+
+export default memo(OvertimeLeaders);

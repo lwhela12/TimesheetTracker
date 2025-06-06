@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { 
   Select, 
@@ -35,7 +35,7 @@ type PayrollChartProps = {
   onExport: () => void;
 };
 
-export default function PayrollChart({
+function PayrollChart({
   data,
   onPeriodChange,
   onExport,
@@ -124,3 +124,5 @@ export default function PayrollChart({
     </Card>
   );
 }
+
+export default memo(PayrollChart);
