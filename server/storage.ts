@@ -130,11 +130,11 @@ export class MemStorage implements IStorage {
   }
 
   // Employee methods
-  async getEmployee(id: number): Promise<Employee | undefined> {
+  async getEmployee(id: number, company_id?: number): Promise<Employee | undefined> {
     return this.employees.get(id);
   }
 
-  async getEmployees(filter?: { active?: boolean }): Promise<Employee[]> {
+  async getEmployees(company_id?: number, filter?: { active?: boolean }): Promise<Employee[]> {
     let employees = Array.from(this.employees.values());
     
     if (filter?.active !== undefined) {
