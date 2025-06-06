@@ -430,8 +430,23 @@ function EmployeeDetailView({
       }
     },
     onSuccess: () => {
+      // Invalidate all punch-related queries
       queryClient.invalidateQueries({ queryKey: ["/api/punches"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll/period"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      
+      // Also invalidate with broader patterns to catch any nested query keys
+      queryClient.invalidateQueries({ predicate: query => 
+        query.queryKey.some(key => 
+          typeof key === 'string' && (
+            key.includes('/api/punches') || 
+            key.includes('/api/payroll') || 
+            key.includes('/api/reports')
+          )
+        )
+      });
+      
       toast({
         title: "Success",
         description: "Time entry saved successfully",
