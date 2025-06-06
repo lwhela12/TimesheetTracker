@@ -173,10 +173,14 @@ function RecentTimesheetEntries({
                       <TableCell className="text-sm">{formatTime(entry.time_in)}</TableCell>
                       <TableCell className="text-sm">{formatTime(entry.time_out)}</TableCell>
                       <TableCell className="text-sm">
-                        {entry.payroll ? entry.payroll.reg_hours.toFixed(1) : "N/A"}
+                        {entry.payroll && entry.payroll.reg_hours != null
+                          ? entry.payroll.reg_hours.toFixed(1)
+                          : "N/A"}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {entry.payroll ? entry.payroll.ot_hours.toFixed(1) : "N/A"}
+                        {entry.payroll && entry.payroll.ot_hours != null
+                          ? entry.payroll.ot_hours.toFixed(1)
+                          : "N/A"}
                       </TableCell>
                       <TableCell className="text-sm">{entry.miles}</TableCell>
                       <TableCell>{getStatusBadge(entry.status)}</TableCell>
