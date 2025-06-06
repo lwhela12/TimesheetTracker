@@ -460,8 +460,29 @@ function EmployeeDetailView({
 
   const saveChanges = async () => {
     const promises = Object.values(editingPunches).map(punch => {
-      if (punch && (punch.time_in || punch.time_out || punch.pto_hours || punch.miles || punch.misc_reimbursement)) {
-        return updatePunchMutation.mutateAsync(punch);
+      if (punch && (
+        punch.time_in || punch.time_out || 
+        punch.pto_hours || punch.holiday_worked_hours || punch.holiday_non_worked_hours ||
+        punch.misc_hours || punch.miles || punch.misc_reimbursement ||
+        punch.lunch_minutes
+      )) {
+        // Clean up the punch data - remove empty string values and convert to appropriate types
+        const cleanPunch = { ...punch };
+        
+        // Convert empty strings to null for time fields
+        if (cleanPunch.time_in === '') cleanPunch.time_in = null;
+        if (cleanPunch.time_out === '') cleanPunch.time_out = null;
+        
+        // Convert empty strings to null for numeric fields
+        if (cleanPunch.pto_hours === '' || cleanPunch.pto_hours === 0) cleanPunch.pto_hours = null;
+        if (cleanPunch.holiday_worked_hours === '' || cleanPunch.holiday_worked_hours === 0) cleanPunch.holiday_worked_hours = null;
+        if (cleanPunch.holiday_non_worked_hours === '' || cleanPunch.holiday_non_worked_hours === 0) cleanPunch.holiday_non_worked_hours = null;
+        if (cleanPunch.misc_hours === '' || cleanPunch.misc_hours === 0) cleanPunch.misc_hours = null;
+        if (cleanPunch.miles === '' || cleanPunch.miles === 0) cleanPunch.miles = null;
+        if (cleanPunch.misc_reimbursement === '' || cleanPunch.misc_reimbursement === 0) cleanPunch.misc_reimbursement = null;
+        if (cleanPunch.lunch_minutes === '' || cleanPunch.lunch_minutes === 0) cleanPunch.lunch_minutes = null;
+        
+        return updatePunchMutation.mutateAsync(cleanPunch);
       }
     }).filter(Boolean);
 

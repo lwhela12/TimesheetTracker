@@ -155,7 +155,7 @@ export class MemStorage implements IStorage {
     return employee;
   }
 
-  async updateEmployee(id: number, update: Partial<InsertEmployee>): Promise<Employee | undefined> {
+  async updateEmployee(id: number, update: Partial<InsertEmployee>, company_id?: number): Promise<Employee | undefined> {
     const employee = this.employees.get(id);
     if (!employee) return undefined;
     
@@ -168,7 +168,7 @@ export class MemStorage implements IStorage {
     return updatedEmployee;
   }
 
-  async deleteEmployee(id: number): Promise<boolean> {
+  async deleteEmployee(id: number, company_id?: number): Promise<boolean> {
     const exists = this.employees.has(id);
     if (exists) {
       // Instead of deleting, set active to false
@@ -179,11 +179,11 @@ export class MemStorage implements IStorage {
   }
 
   // Punch methods
-  async getPunch(id: number): Promise<Punch | undefined> {
+  async getPunch(id: number, company_id?: number): Promise<Punch | undefined> {
     return this.punches.get(id);
   }
 
-  async getPunches(filter?: { 
+  async getPunches(company_id?: number, filter?: { 
     employee_id?: number, 
     from_date?: Date, 
     to_date?: Date,
@@ -288,19 +288,24 @@ export class MemStorage implements IStorage {
     const holidayRateMultiplierSetting = await this.getSetting('holiday_rate_multiplier');
     const holidayRateMultiplier = parseFloat(holidayRateMultiplierSetting?.value || '1.5');
     
-    // Calculate hours worked
-    const timeIn = new Date(`1970-01-01T${punch.time_in}`);
-    const timeOut = new Date(`1970-01-01T${punch.time_out}`);
+    // Calculate hours worked from time in/out (if present)
+    let regHours = 0;
+    let otHours = 0;
     
-    let totalMinutes = (timeOut.getTime() - timeIn.getTime()) / 60000 - punch.lunch_minutes;
-    if (totalMinutes < 0) totalMinutes += 24 * 60; // Handle time crossing midnight
-    
-    const totalHours = totalMinutes / 60;
-    
-    // For MVP, apply anything over 8 hours as overtime
-    // In a real implementation, this would track weekly hours per employee
-    let regHours = Math.min(8, totalHours);
-    let otHours = Math.max(0, totalHours - 8);
+    if (punch.time_in && punch.time_out) {
+      const timeIn = new Date(`1970-01-01T${punch.time_in}`);
+      const timeOut = new Date(`1970-01-01T${punch.time_out}`);
+      
+      let totalMinutes = (timeOut.getTime() - timeIn.getTime()) / 60000 - (punch.lunch_minutes || 0);
+      if (totalMinutes < 0) totalMinutes += 24 * 60; // Handle time crossing midnight
+      
+      const totalHours = totalMinutes / 60;
+      
+      // For MVP, apply anything over 8 hours as overtime
+      // In a real implementation, this would track weekly hours per employee
+      regHours = Math.min(8, totalHours);
+      otHours = Math.max(0, totalHours - 8);
+    }
     
     // Get all hours types
     const ptoHours = punch.pto_hours || 0;
@@ -317,7 +322,7 @@ export class MemStorage implements IStorage {
     const miscHoursPay = miscHours * employee.rate; // Assume regular rate for misc hours
     
     // Calculate reimbursements
-    const mileagePay = punch.miles * mileageRate;
+    const mileagePay = (punch.miles || 0) * mileageRate;
     const miscReimbursement = punch.misc_reimbursement || 0;
     
     // Calculate total pay
