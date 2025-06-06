@@ -189,12 +189,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/punches/:id", async (req, res) => {
     try {
-      const punch = await storage.getPunch(Number(req.params.id));
+      const punch = await storage.getPunch(Number(req.params.id), req.user!.company_id);
       if (!punch) {
         return res.status(404).json({ message: "Timesheet entry not found" });
       }
       
-      const employee = await storage.getEmployee(punch.employee_id);
+      const employee = await storage.getEmployee(punch.employee_id, req.user!.company_id);
       
       // Find payroll calculation for this punch
       let payroll = null;
@@ -319,14 +319,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const id = Number(req.params.id);
-      const existingPunch = await storage.getPunch(id);
+      const existingPunch = await storage.getPunch(id, req.user!.company_id);
       
       if (!existingPunch) {
         return res.status(404).json({ message: "Timesheet entry not found" });
       }
       
       const validatedData = insertPunchSchema.partial().parse(req.body);
-      const updatedPunch = await storage.updatePunch(id, validatedData);
+      const updatedPunch = await storage.updatePunch(id, validatedData, req.user!.company_id);
       
       // Recalculate payroll
       const payroll = await storage.calculatePayroll(id);
@@ -361,13 +361,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const id = Number(req.params.id);
-      const existingPunch = await storage.getPunch(id);
+      const existingPunch = await storage.getPunch(id, req.user!.company_id);
       
       if (!existingPunch) {
         return res.status(404).json({ message: "Timesheet entry not found" });
       }
       
-      await storage.deletePunch(id);
+      await storage.deletePunch(id, req.user!.company_id);
       
       // Log audit
       await storage.addAuditLog({
@@ -399,7 +399,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fromDate = new Date(req.query.from_date as string);
       const toDate = new Date(req.query.to_date as string);
       
-      const report = await storage.getPayrollReport(fromDate, toDate);
+      const report = await storage.getPayrollReport(req.user!.company_id, fromDate, toDate);
       
       // Format for CSV if requested
       if (req.query.format === 'csv') {
@@ -445,7 +445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fromDate = new Date(req.query.from_date as string);
       const toDate = new Date(req.query.to_date as string);
       
-      const report = await storage.getPayrollReport(fromDate, toDate);
+      const report = await storage.getPayrollReport(req.user!.company_id, fromDate, toDate);
       
       // Group by employee and sum up overtime
       const overtimeByEmployee: Record<number, {
