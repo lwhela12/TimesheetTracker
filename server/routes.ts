@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { z } from "zod";
-import { insertEmployeeSchema, insertPunchSchema, punches, employees } from "@shared/schema";
+import { insertEmployeeSchema, insertPunchSchema, punches, employees, settings } from "@shared/schema";
 import { db } from "./db";
 import { and, gte, lte, eq } from "drizzle-orm";
 
