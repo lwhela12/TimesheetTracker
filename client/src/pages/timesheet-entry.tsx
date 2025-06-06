@@ -120,6 +120,7 @@ export default function TimesheetEntry() {
   const [dateFilter, setDateFilter] = useState<string>(
     formatDate(new Date())
   );
+  const [page, setPage] = useState(1);
   const [selectedEntry, setSelectedEntry] = useState<TimesheetEntry | null>(
     null
   );
@@ -133,7 +134,9 @@ export default function TimesheetEntry() {
     isLoading,
     refetch,
   } = useQuery<TimesheetEntry[]>({
-    queryKey: ["/api/punches"],
+    queryKey: [
+      `/api/punches?page=${page}&limit=10&searchQuery=${encodeURIComponent(searchQuery)}`,
+    ],
   });
 
   // Fetch employees for dropdown
@@ -471,8 +474,9 @@ export default function TimesheetEntry() {
                   </Button>
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-md border">
-                  <Table>
+                  <div>
+                    <div className="overflow-x-auto rounded-md border">
+                      <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Employee</TableHead>
@@ -561,9 +565,15 @@ export default function TimesheetEntry() {
                         );
                       })}
                     </TableBody>
-                  </Table>
-                </div>
-              )}
+                      </Table>
+                    </div>
+                    <div className="flex justify-between items-center mt-4">
+                      <Button variant="outline" onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}>Previous</Button>
+                      <span className="text-sm text-neutral-600">Page {page}</span>
+                      <Button variant="outline" onClick={() => setPage(page + 1)} disabled={timesheetEntries.length < 10}>Next</Button>
+                    </div>
+                  </div>
+                )}
             </CardContent>
           </Card>
         </main>

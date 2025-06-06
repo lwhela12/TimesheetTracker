@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
@@ -60,13 +60,25 @@ export class MultiCompanyStorage implements IStorage {
     return employee || undefined;
   }
 
-  async getEmployees(company_id: number, filter?: { active?: boolean }): Promise<Employee[]> {
+  async getEmployees(company_id: number, filter?: { active?: boolean; searchQuery?: string; page?: number; limit?: number }): Promise<Employee[]> {
     let query = db.select().from(employees).where(eq(employees.company_id, company_id));
-    
+
     if (filter?.active !== undefined) {
       query = query.where(and(eq(employees.company_id, company_id), eq(employees.active, filter.active)));
     }
-    
+
+    if (filter?.searchQuery) {
+      const q = `%${filter.searchQuery.toLowerCase()}%`;
+      query = query.where(and(eq(employees.company_id, company_id), sql`lower(${employees.first_name} || ' ' || ${employees.last_name}) like ${q}`));
+    }
+
+    if (filter?.limit !== undefined) {
+      query = query.limit(filter.limit);
+    }
+    if (filter?.page !== undefined && filter?.limit !== undefined) {
+      query = query.offset((filter.page - 1) * filter.limit);
+    }
+
     return await query;
   }
 
@@ -98,11 +110,14 @@ export class MultiCompanyStorage implements IStorage {
     return punch.punches || undefined;
   }
 
-  async getPunches(company_id: number, filter?: { 
-    employee_id?: number, 
-    from_date?: Date, 
+  async getPunches(company_id: number, filter?: {
+    employee_id?: number,
+    from_date?: Date,
     to_date?: Date,
-    status?: string
+    status?: string,
+    searchQuery?: string,
+    page?: number,
+    limit?: number
   }): Promise<Punch[]> {
     let query = db.select({ punches })
       .from(punches)
@@ -119,7 +134,14 @@ export class MultiCompanyStorage implements IStorage {
     if (filter?.from_date) {
       query = query.where(and(
         eq(employees.company_id, company_id),
-        eq(punches.date, filter.from_date.toISOString().split('T')[0])
+        gte(punches.date, filter.from_date.toISOString().split('T')[0])
+      ));
+    }
+
+    if (filter?.to_date) {
+      query = query.where(and(
+        eq(employees.company_id, company_id),
+        lte(punches.date, filter.to_date.toISOString().split('T')[0])
       ));
     }
 
@@ -130,7 +152,19 @@ export class MultiCompanyStorage implements IStorage {
       ));
     }
 
-    const results = await query;
+    if (filter?.searchQuery) {
+      const q = `%${filter.searchQuery.toLowerCase()}%`;
+      query = query.where(sql`cast(${punches.date} as text) like ${q}`);
+    }
+
+    if (filter?.limit !== undefined) {
+      query = query.limit(filter.limit);
+    }
+    if (filter?.page !== undefined && filter?.limit !== undefined) {
+      query = query.offset((filter.page - 1) * filter.limit);
+    }
+
+    const results = await query.orderBy(desc(punches.created_at));
     return results.map(r => r.punches);
   }
 
@@ -238,25 +272,71 @@ export class MultiCompanyStorage implements IStorage {
   }
 
   async getPayrollReport(company_id: number, from_date: Date, to_date: Date): Promise<Array<Punch & { employee: Employee, payroll: PayrollCalc }>> {
-    const results = await db.select()
+    const [mileageRateSetting] = await db.select().from(settings)
+      .where(and(eq(settings.company_id, company_id), eq(settings.key, 'mileage_rate')));
+    const [otThresholdSetting] = await db.select().from(settings)
+      .where(and(eq(settings.company_id, company_id), eq(settings.key, 'ot_threshold')));
+
+    const mileageRate = parseFloat(mileageRateSetting?.value || '0.30');
+    const otThreshold = parseFloat(otThresholdSetting?.value || '8');
+
+    const rows = await db.select({ punch: punches, employee: employees })
       .from(punches)
       .innerJoin(employees, eq(punches.employee_id, employees.id))
-      .leftJoin(payroll_calcs, eq(punches.id, payroll_calcs.punch_id))
       .where(and(
         eq(employees.company_id, company_id),
-        eq(punches.date, from_date.toISOString().split('T')[0])
+        gte(punches.date, from_date.toISOString().split('T')[0]),
+        lte(punches.date, to_date.toISOString().split('T')[0])
       ));
 
     const report: Array<Punch & { employee: Employee, payroll: PayrollCalc }> = [];
-    
-    for (const row of results) {
-      if (row.payroll_calcs) {
-        report.push({
-          ...row.punches,
-          employee: row.employees,
-          payroll: row.payroll_calcs
-        });
-      }
+
+    for (const row of rows) {
+      const punch = row.punch;
+      const employee = row.employee;
+
+      const timeIn = new Date(`1970-01-01T${punch.time_in}`);
+      const timeOut = new Date(`1970-01-01T${punch.time_out}`);
+      const workedMinutes = (timeOut.getTime() - timeIn.getTime()) / 60000 - (punch.lunch_minutes || 0);
+      const workedHours = workedMinutes / 60;
+      const regHours = Math.min(workedHours, otThreshold);
+      const otHours = Math.max(0, workedHours - otThreshold);
+
+      const regPay = regHours * employee.rate;
+      const otPay = otHours * employee.rate * 1.5;
+      const ptoPay = (punch.pto_hours || 0) * employee.rate;
+      const holidayWorkedPay = (punch.holiday_worked_hours || 0) * employee.rate * 1.5;
+      const holidayNonWorkedPay = (punch.holiday_non_worked_hours || 0) * employee.rate;
+      const miscHoursPay = (punch.misc_hours || 0) * employee.rate;
+      const mileagePay = (punch.miles || 0) * mileageRate;
+      const miscReimb = punch.misc_reimbursement || 0;
+      const totalPay = regPay + otPay + ptoPay + holidayWorkedPay + holidayNonWorkedPay + miscHoursPay + mileagePay + miscReimb;
+
+      report.push({
+        ...punch,
+        employee,
+        payroll: {
+          id: 0,
+          punch_id: punch.id,
+          reg_hours: regHours,
+          ot_hours: otHours,
+          pto_hours: punch.pto_hours || 0,
+          holiday_worked_hours: punch.holiday_worked_hours || 0,
+          holiday_non_worked_hours: punch.holiday_non_worked_hours || 0,
+          misc_hours: punch.misc_hours || 0,
+          reg_pay: regPay,
+          ot_pay: otPay,
+          pto_pay: ptoPay,
+          holiday_worked_pay: holidayWorkedPay,
+          holiday_non_worked_pay: holidayNonWorkedPay,
+          misc_hours_pay: miscHoursPay,
+          pay: regPay + otPay + ptoPay + holidayWorkedPay + holidayNonWorkedPay + miscHoursPay,
+          mileage_pay: mileagePay,
+          misc_reimbursement: miscReimb,
+          total_pay: totalPay,
+          calculated_at: new Date()
+        }
+      });
     }
 
     return report;
