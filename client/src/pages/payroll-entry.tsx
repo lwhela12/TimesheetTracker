@@ -310,25 +310,39 @@ export default function PayrollEntry() {
                               )}
                             </TableCell>
                             <TableCell className="text-right">
-                              {employee.has_entries ? employee.total_hours.toFixed(1) : "-"}
+                              {employee.has_entries && employee.total_hours != null
+                                ? employee.total_hours.toFixed(1)
+                                : "-"}
                             </TableCell>
                             <TableCell className="text-right">
-                              {employee.has_entries ? employee.pto_hours.toFixed(1) : "-"}
+                              {employee.has_entries && employee.pto_hours != null
+                                ? employee.pto_hours.toFixed(1)
+                                : "-"}
                             </TableCell>
                             <TableCell className="text-right">
-                              {employee.has_entries ? employee.holiday_worked_hours.toFixed(1) : "-"}
+                              {employee.has_entries && employee.holiday_worked_hours != null
+                                ? employee.holiday_worked_hours.toFixed(1)
+                                : "-"}
                             </TableCell>
                             <TableCell className="text-right">
-                              {employee.has_entries ? employee.holiday_non_worked_hours.toFixed(1) : "-"}
+                              {employee.has_entries && employee.holiday_non_worked_hours != null
+                                ? employee.holiday_non_worked_hours.toFixed(1)
+                                : "-"}
                             </TableCell>
                             <TableCell className="text-right">
-                              {employee.has_entries ? employee.overtime_hours.toFixed(1) : "-"}
+                              {employee.has_entries && employee.overtime_hours != null
+                                ? employee.overtime_hours.toFixed(1)
+                                : "-"}
                             </TableCell>
                             <TableCell className="text-right">
-                              {employee.has_entries ? employee.total_miles.toFixed(1) : "-"}
+                              {employee.has_entries && employee.total_miles != null
+                                ? employee.total_miles.toFixed(1)
+                                : "-"}
                             </TableCell>
                             <TableCell className="text-right">
-                              {employee.has_entries ? formatCurrency(employee.misc_reimbursement) : "-"}
+                              {employee.has_entries && employee.misc_reimbursement != null
+                                ? formatCurrency(employee.misc_reimbursement)
+                                : "-"}
                             </TableCell>
                             <TableCell className="text-right font-medium">
                               {employee.has_entries ? formatCurrency(employee.total_pay) : "-"}
@@ -428,37 +442,7 @@ function EmployeeDetailView({
         });
         return res.json();
       }
-    },
-    onSuccess: () => {
-      // Invalidate all punch-related queries
-      queryClient.invalidateQueries({ queryKey: ["/api/punches"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payroll/period"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/reports/dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
-      
-      // Also invalidate with broader patterns to catch any nested query keys
-      queryClient.invalidateQueries({ predicate: query => 
-        query.queryKey.some(key => 
-          typeof key === 'string' && (
-            key.includes('/api/punches') || 
-            key.includes('/api/payroll') || 
-            key.includes('/api/reports')
-          )
-        )
-      });
-      
-      toast({
-        title: "Success",
-        description: "Time entry saved successfully",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: `Failed to save entry: ${error.message}`,
-        variant: "destructive",
-      });
-    },
+    }
   });
 
   const handleFieldChange = (date: string, field: string, value: any) => {
@@ -475,20 +459,25 @@ function EmployeeDetailView({
 
   const saveChanges = async () => {
     const promises = Object.values(editingPunches).map(punch => {
-      if (punch && (
-        punch.time_in || punch.time_out || 
-        punch.pto_hours || punch.holiday_worked_hours || punch.holiday_non_worked_hours ||
-        punch.misc_hours || punch.miles || punch.misc_reimbursement ||
-        punch.lunch_minutes
-      )) {
-        // Clean up the punch data - remove empty string values and convert to appropriate types
+      if (
+        punch &&
+        (
+          punch.time_in ||
+          punch.time_out ||
+          punch.pto_hours ||
+          punch.holiday_worked_hours ||
+          punch.holiday_non_worked_hours ||
+          punch.misc_hours ||
+          punch.miles ||
+          punch.misc_reimbursement ||
+          punch.lunch_minutes
+        )
+      ) {
         const cleanPunch = { ...punch };
-        
-        // Convert empty strings to null for time fields
+
         if (cleanPunch.time_in === '') cleanPunch.time_in = null;
         if (cleanPunch.time_out === '') cleanPunch.time_out = null;
-        
-        // Convert empty strings to null for numeric fields
+
         if (cleanPunch.pto_hours === '' || cleanPunch.pto_hours === 0) cleanPunch.pto_hours = null;
         if (cleanPunch.holiday_worked_hours === '' || cleanPunch.holiday_worked_hours === 0) cleanPunch.holiday_worked_hours = null;
         if (cleanPunch.holiday_non_worked_hours === '' || cleanPunch.holiday_non_worked_hours === 0) cleanPunch.holiday_non_worked_hours = null;
@@ -496,13 +485,25 @@ function EmployeeDetailView({
         if (cleanPunch.miles === '' || cleanPunch.miles === 0) cleanPunch.miles = null;
         if (cleanPunch.misc_reimbursement === '' || cleanPunch.misc_reimbursement === 0) cleanPunch.misc_reimbursement = null;
         if (cleanPunch.lunch_minutes === '' || cleanPunch.lunch_minutes === 0) cleanPunch.lunch_minutes = null;
-        
+
         return updatePunchMutation.mutateAsync(cleanPunch);
       }
     }).filter(Boolean);
 
-    await Promise.all(promises);
-    setHasChanges(false);
+    try {
+      await Promise.all(promises);
+      queryClient.invalidateQueries({
+        predicate: q => q.queryKey.some(key => typeof key === 'string' && key.includes('/api/punches'))
+      });
+      toast({ title: 'Success', description: 'Changes saved' });
+      setHasChanges(false);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: `Failed to save changes: ${error.message}`,
+        variant: 'destructive'
+      });
+    }
   };
   // Generate 14 days for the two-week period
   const twoWeekDays = Array.from({ length: 14 }, (_, i) => {
