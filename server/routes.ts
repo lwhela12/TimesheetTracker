@@ -3,7 +3,9 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { z } from "zod";
-import { insertEmployeeSchema, insertPunchSchema } from "@shared/schema";
+import { insertEmployeeSchema, insertPunchSchema, punches, employees } from "@shared/schema";
+import { db } from "./db";
+import { and, gte, lte, eq } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -15,7 +17,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.isAuthenticated() || !req.user) {
         return res.status(401).json({ message: "Authentication required" });
       }
-      const filter = req.query.active ? { active: req.query.active === 'true' } : undefined;
+      const filter: { active?: boolean; searchQuery?: string; page?: number; limit?: number } = {};
+      if (req.query.active !== undefined) filter.active = req.query.active === 'true';
+      if (req.query.searchQuery) filter.searchQuery = String(req.query.searchQuery);
+      if (req.query.page) filter.page = parseInt(req.query.page as string, 10);
+      if (req.query.limit) filter.limit = parseInt(req.query.limit as string, 10);
       const employees = await storage.getEmployees(req.user.company_id, filter);
       res.json(employees);
     } catch (error) {
@@ -150,6 +156,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         from_date?: Date;
         to_date?: Date;
         status?: string;
+        searchQuery?: string;
+        page?: number;
+        limit?: number;
       } = {};
       
       if (req.query.employee_id) {
@@ -167,7 +176,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.query.status) {
         filter.status = req.query.status as string;
       }
-      
+
+      if (req.query.searchQuery) filter.searchQuery = String(req.query.searchQuery);
+      if (req.query.page) filter.page = parseInt(req.query.page as string, 10);
+      if (req.query.limit) filter.limit = parseInt(req.query.limit as string, 10);
+
       const punches = await storage.getPunches(req.user.company_id, filter);
       
       // Enrich punch data with employee info
@@ -499,51 +512,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get last 4 weeks for trend
       const fourWeeksAgo = new Date(mondayThisWeek);
       fourWeeksAgo.setDate(mondayThisWeek.getDate() - 28);
-      
-      // Get this week's data
-      const thisWeekReport = await storage.getPayrollReport(req.user.company_id, mondayThisWeek, sundayThisWeek);
-      
-      // Get previous week's data for comparison
+
       const mondayLastWeek = new Date(mondayThisWeek);
       mondayLastWeek.setDate(mondayThisWeek.getDate() - 7);
-      
       const sundayLastWeek = new Date(mondayLastWeek);
       sundayLastWeek.setDate(mondayLastWeek.getDate() + 6);
       sundayLastWeek.setHours(23, 59, 59, 999);
       
-      const lastWeekReport = await storage.getPayrollReport(req.user.company_id, mondayLastWeek, sundayLastWeek);
-      
-      // Get weekly data for chart
-      const weeklyData = [];
-      for (let i = 0; i < 4; i++) {
-        const weekStart = new Date(mondayThisWeek);
-        weekStart.setDate(mondayThisWeek.getDate() - (7 * i));
-        
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
-        weekEnd.setHours(23, 59, 59, 999);
-        
-        const weekReport = await storage.getPayrollReport(req.user.company_id, weekStart, weekEnd);
-        
-        let regularPay = 0;
-        let overtimePay = 0;
-        let mileagePay = 0;
-        
-        for (const entry of weekReport) {
-          regularPay += entry.payroll.pay - (entry.payroll.ot_hours * entry.employee.rate * 1.5);
-          overtimePay += entry.payroll.ot_hours * entry.employee.rate * 1.5;
-          mileagePay += entry.payroll.mileage_pay;
+      const rows = await db.select({ punch: punches, employee: employees })
+        .from(punches)
+        .innerJoin(employees, eq(punches.employee_id, employees.id))
+        .where(and(
+          eq(employees.company_id, req.user.company_id),
+          gte(punches.date, fourWeeksAgo.toISOString().split('T')[0]),
+          lte(punches.date, sundayThisWeek.toISOString().split('T')[0])
+        ));
+
+      const thisWeekReport: Array<any> = [];
+      const lastWeekReport: Array<any> = [];
+      const weeklyDataMap: Record<string, { regularPay: number; overtimePay: number; mileagePay: number; }> = {};
+
+      const [mileageRateSetting] = await db.select().from(settings)
+        .where(and(eq(settings.company_id, req.user.company_id), eq(settings.key, 'mileage_rate')));
+      const [otThresholdSetting] = await db.select().from(settings)
+        .where(and(eq(settings.company_id, req.user.company_id), eq(settings.key, 'ot_threshold')));
+      const mileageRate = parseFloat(mileageRateSetting?.value || '0.30');
+      const otThreshold = parseFloat(otThresholdSetting?.value || '8');
+
+      for (const row of rows) {
+        const punch = row.punch;
+        const employee = row.employee;
+        const dateObj = new Date(punch.date);
+        const weekStart = new Date(dateObj);
+        weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() || 7) - 1));
+
+        const timeIn = new Date(`1970-01-01T${punch.time_in}`);
+        const timeOut = new Date(`1970-01-01T${punch.time_out}`);
+        const workedMinutes = (timeOut.getTime() - timeIn.getTime()) / 60000 - (punch.lunch_minutes || 0);
+        const workedHours = workedMinutes / 60;
+        const regHours = Math.min(workedHours, otThreshold);
+        const otHours = Math.max(0, workedHours - otThreshold);
+
+        const regPay = regHours * employee.rate;
+        const otPay = otHours * employee.rate * 1.5;
+        const mileagePay = (punch.miles || 0) * mileageRate;
+
+        const entryData = {
+          employee,
+          payroll: { ot_hours: otHours, pay: regPay + otPay, mileage_pay: mileagePay },
+          miles: punch.miles || 0
+        };
+
+        if (dateObj >= mondayThisWeek && dateObj <= sundayThisWeek) {
+          thisWeekReport.push(entryData);
+        } else if (dateObj >= mondayLastWeek && dateObj <= sundayLastWeek) {
+          lastWeekReport.push(entryData);
         }
-        
-        weeklyData.push({
-          weekStart: weekStart.toISOString().split('T')[0],
-          weekEnd: weekEnd.toISOString().split('T')[0],
-          regularPay,
-          overtimePay,
-          mileagePay,
-          totalPay: regularPay + overtimePay + mileagePay
-        });
+
+        const key = weekStart.toISOString().split('T')[0];
+        if (!weeklyDataMap[key]) {
+          weeklyDataMap[key] = { regularPay: 0, overtimePay: 0, mileagePay: 0 };
+        }
+        weeklyDataMap[key].regularPay += regPay;
+        weeklyDataMap[key].overtimePay += otPay;
+        weeklyDataMap[key].mileagePay += mileagePay;
       }
+
+      const weeklyData = Object.entries(weeklyDataMap).map(([weekStart, vals]) => {
+        const start = new Date(weekStart);
+        const weekEnd = new Date(start);
+        weekEnd.setDate(start.getDate() + 6);
+        return {
+          weekStart,
+          weekEnd: weekEnd.toISOString().split('T')[0],
+          ...vals,
+          totalPay: vals.regularPay + vals.overtimePay + vals.mileagePay
+        };
+      }).sort((a, b) => new Date(b.weekStart).getTime() - new Date(a.weekStart).getTime()).slice(0,4);
       
       // Get active employees count
       const activeEmployees = await storage.getEmployees(req.user.company_id, { active: true });
@@ -605,13 +650,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .slice(0, 5); // Top 5
       
       // Get recent timesheet entries
-      const recentEntries = await storage.getPunches(req.user.company_id);
+      const recentEntries = await storage.getPunches(req.user.company_id, { limit: 5, page: 1 });
       recentEntries.sort((a, b) => {
         return new Date(b.created_at || new Date()).getTime() - new Date(a.created_at || new Date()).getTime();
       });
-      
+
       const enrichedRecentEntries = await Promise.all(
-        recentEntries.slice(0, 5).map(async (punch) => {
+        recentEntries.map(async (punch) => {
           const employee = await storage.getEmployee(punch.employee_id, req.user.company_id);
           let payroll;
           try {

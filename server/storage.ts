@@ -26,18 +26,21 @@ export interface IStorage {
   
   // Employee operations
   getEmployee(id: number, company_id: number): Promise<Employee | undefined>;
-  getEmployees(company_id: number, filter?: { active?: boolean }): Promise<Employee[]>;
+  getEmployees(company_id: number, filter?: { active?: boolean; searchQuery?: string; page?: number; limit?: number }): Promise<Employee[]>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
   updateEmployee(id: number, employee: Partial<InsertEmployee>, company_id: number): Promise<Employee | undefined>;
   deleteEmployee(id: number, company_id: number): Promise<boolean>;
   
   // Punch operations
   getPunch(id: number, company_id: number): Promise<Punch | undefined>;
-  getPunches(company_id: number, filter?: { 
-    employee_id?: number, 
-    from_date?: Date, 
+  getPunches(company_id: number, filter?: {
+    employee_id?: number,
+    from_date?: Date,
     to_date?: Date,
-    status?: string
+    status?: string,
+    searchQuery?: string,
+    page?: number,
+    limit?: number
   }): Promise<Punch[]>;
   createPunch(punch: InsertPunch): Promise<Punch>;
   updatePunch(id: number, punch: Partial<InsertPunch>, company_id: number): Promise<Punch | undefined>;
@@ -134,14 +137,24 @@ export class MemStorage implements IStorage {
     return this.employees.get(id);
   }
 
-  async getEmployees(filter?: { active?: boolean }): Promise<Employee[]> {
-    let employees = Array.from(this.employees.values());
-    
+  async getEmployees(filter?: { active?: boolean; searchQuery?: string; page?: number; limit?: number }): Promise<Employee[]> {
+    let result = Array.from(this.employees.values());
+
     if (filter?.active !== undefined) {
-      employees = employees.filter(emp => emp.active === filter.active);
+      result = result.filter(emp => emp.active === filter.active);
     }
-    
-    return employees;
+
+    if (filter?.searchQuery) {
+      const q = filter.searchQuery.toLowerCase();
+      result = result.filter(e => `${e.first_name} ${e.last_name}`.toLowerCase().includes(q));
+    }
+
+    if (filter?.page !== undefined && filter?.limit !== undefined) {
+      const start = (filter.page - 1) * filter.limit;
+      result = result.slice(start, start + filter.limit);
+    }
+
+    return result;
   }
 
   async createEmployee(insertEmployee: InsertEmployee): Promise<Employee> {
@@ -183,11 +196,14 @@ export class MemStorage implements IStorage {
     return this.punches.get(id);
   }
 
-  async getPunches(filter?: { 
-    employee_id?: number, 
-    from_date?: Date, 
+  async getPunches(filter?: {
+    employee_id?: number,
+    from_date?: Date,
     to_date?: Date,
-    status?: string
+    status?: string,
+    searchQuery?: string,
+    page?: number,
+    limit?: number
   }): Promise<Punch[]> {
     let punches = Array.from(this.punches.values());
     
@@ -212,7 +228,17 @@ export class MemStorage implements IStorage {
     if (filter?.status) {
       punches = punches.filter(punch => punch.status === filter.status);
     }
-    
+
+    if (filter?.searchQuery) {
+      const q = filter.searchQuery.toLowerCase();
+      punches = punches.filter(p => String(p.date).includes(q));
+    }
+
+    if (filter?.page !== undefined && filter?.limit !== undefined) {
+      const start = (filter.page - 1) * filter.limit;
+      punches = punches.slice(start, start + filter.limit);
+    }
+
     return punches;
   }
 

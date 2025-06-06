@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, doublePrecision, varchar, date, time } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, doublePrecision, varchar, date, time, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -32,6 +32,10 @@ export const employees = pgTable("employees", {
   hire_date: date("hire_date"),
   active: boolean("active").notNull().default(true),
   created_at: timestamp("created_at").defaultNow(),
+}, (table) => {
+  return {
+    companyActiveIdx: index("employee_company_active_idx").on(table.company_id, table.active),
+  };
 });
 
 // Timesheet punch entry
@@ -52,6 +56,10 @@ export const punches = pgTable("punches", {
   status: varchar("status", { length: 20 }).notNull().default("pending"),
   created_by: integer("created_by").references(() => users.id),
   created_at: timestamp("created_at").defaultNow(),
+}, (table) => {
+  return {
+    employeeDateIdx: index("punch_employee_date_idx").on(table.employee_id, table.date),
+  };
 });
 
 // Payroll calculation table (for memoizing calculations)
@@ -87,6 +95,10 @@ export const audit_logs = pgTable("audit_logs", {
   old_val: text("old_val"),
   new_val: text("new_val"),
   changed_at: timestamp("changed_at").defaultNow(),
+}, (table) => {
+  return {
+    tableRowIdx: index("audit_table_row_idx").on(table.table_name, table.row_id),
+  };
 });
 
 // Settings table
