@@ -1,16 +1,16 @@
 import { db } from "./db";
 import { settings } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 async function seedDatabase() {
   console.log("Seeding database with default settings...");
 
   // Default settings
   const defaultSettings = [
-    { key: "mileage_rate", value: "0.67" }, // Current IRS rate
-    { key: "ot_threshold", value: "8" }, // Daily overtime threshold
-    { key: "work_week_start", value: "3" }, // Wednesday = 3
-    { key: "holiday_rate_multiplier", value: "1.5" }
+    { company_id: 1, key: "mileage_rate", value: "0.67" }, // Current IRS rate
+    { company_id: 1, key: "ot_threshold", value: "8" }, // Daily overtime threshold
+    { company_id: 1, key: "work_week_start", value: "3" }, // Wednesday = 3
+    { company_id: 1, key: "holiday_rate_multiplier", value: "1.5" }
   ];
 
   for (const setting of defaultSettings) {
@@ -18,7 +18,7 @@ async function seedDatabase() {
     const [existing] = await db
       .select()
       .from(settings)
-      .where(eq(settings.key, setting.key));
+      .where(and(eq(settings.key, setting.key), eq(settings.company_id, setting.company_id)));
 
     if (!existing) {
       await db.insert(settings).values(setting);

@@ -47,7 +47,7 @@ export interface IDatabase {
     page?: number,
     limit?: number
   }): Promise<Punch[]>;
-  createPunch(punch: InsertPunch): Promise<Punch>;
+  createPunch(punch: InsertPunch, company_id: number): Promise<Punch>;
   updatePunch(id: number, punch: Partial<InsertPunch>, company_id: number): Promise<Punch | undefined>;
   deletePunch(id: number, company_id: number): Promise<boolean>;
   
@@ -158,7 +158,7 @@ export class Database implements IDatabase {
       .from(punches)
       .innerJoin(employees, eq(punches.employee_id, employees.id))
       .where(and(eq(punches.id, id), eq(employees.company_id, company_id)));
-    return punch.punches || undefined;
+    return punch ? punch.punches : undefined;
   }
 
   async getPunchByEmployeeAndDate(employee_id: number, date: string): Promise<Punch | undefined> {
@@ -227,17 +227,36 @@ export class Database implements IDatabase {
     return results.map(r => r.punches);
   }
 
-  async createPunch(punch: InsertPunch): Promise<Punch> {
+  async createPunch(punch: InsertPunch, company_id: number): Promise<Punch> {
+    const [employee] = await db
+      .select()
+      .from(employees)
+      .where(and(eq(employees.id, punch.employee_id), eq(employees.company_id, company_id)));
+
+    if (!employee) {
+      throw new Error('Invalid employee for company');
+    }
+
     const [newPunch] = await db.insert(punches).values(punch).returning();
     return newPunch;
   }
 
   async updatePunch(id: number, punch: Partial<InsertPunch>, company_id: number): Promise<Punch | undefined> {
+    if (punch.employee_id !== undefined) {
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(and(eq(employees.id, punch.employee_id), eq(employees.company_id, company_id)));
+      if (!employee) {
+        throw new Error('Invalid employee for company');
+      }
+    }
+
     const [updated] = await db.update(punches)
       .set(punch)
       .from(employees)
       .where(and(
-        eq(punches.id, id), 
+        eq(punches.id, id),
         eq(punches.employee_id, employees.id),
         eq(employees.company_id, company_id)
       ))

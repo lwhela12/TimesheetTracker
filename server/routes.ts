@@ -239,7 +239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         created_by: req.user.id
       });
       
-      const newPunch = await storage.createPunch(validatedData);
+      const newPunch = await storage.createPunch(validatedData, req.user.company_id);
       
       // Calculate payroll
       const payroll = await storage.calculatePayroll(newPunch.id);
@@ -277,6 +277,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const employeeId = entries[0].employee_id;
+      const validEmployee = await storage.getEmployee(employeeId, req.user.company_id);
+      if (!validEmployee) {
+        return res.status(400).json({ message: "Invalid employee" });
+      }
       const dates = entries.map(e => new Date(e.date));
       const fromDate = new Date(Math.min.apply(null, dates.map(d => d.getTime())));
       const toDate = new Date(Math.max.apply(null, dates.map(d => d.getTime())));
