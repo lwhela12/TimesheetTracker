@@ -68,10 +68,16 @@ type PayrollReportEntry = {
   payroll: {
     reg_hours: number;
     ot_hours: number;
+    pto_hours?: number;
+    holiday_worked_hours?: number;
+    holiday_non_worked_hours?: number;
     pay: number;
     mileage_pay: number;
+    misc_reimbursement?: number;
+    total_pay: number;
   };
   miles: number;
+  misc_reimbursement?: number;
 };
 
 export default function Reports() {
@@ -466,6 +472,10 @@ export default function Reports() {
                               <TableHead>Employee</TableHead>
                               <TableHead>Reg Hours</TableHead>
                               <TableHead>OT Hours</TableHead>
+                              <TableHead>PTO Hours</TableHead>
+                              <TableHead>Holiday Worked</TableHead>
+                              <TableHead>Holiday Non-Worked</TableHead>
+                              <TableHead>Misc Reimb</TableHead>
                               <TableHead>Reg Pay</TableHead>
                               <TableHead>OT Pay</TableHead>
                               <TableHead>Miles</TableHead>
@@ -477,7 +487,7 @@ export default function Reports() {
                             {payrollReport.map((entry) => {
                               const regPay = entry.payroll.pay - (entry.payroll.ot_hours * entry.employee.rate * 1.5);
                               const otPay = entry.payroll.ot_hours * entry.employee.rate * 1.5;
-                              const totalPay = entry.payroll.pay + entry.payroll.mileage_pay;
+                              const totalPay = entry.payroll.total_pay;
                               
                               return (
                                 <TableRow key={entry.id}>
@@ -487,6 +497,10 @@ export default function Reports() {
                                   </TableCell>
                                   <TableCell>{entry.payroll.reg_hours.toFixed(1)}</TableCell>
                                   <TableCell>{entry.payroll.ot_hours.toFixed(1)}</TableCell>
+                                  <TableCell>{(entry.payroll.pto_hours || 0).toFixed(1)}</TableCell>
+                                  <TableCell>{(entry.payroll.holiday_worked_hours || 0).toFixed(1)}</TableCell>
+                                  <TableCell>{(entry.payroll.holiday_non_worked_hours || 0).toFixed(1)}</TableCell>
+                                  <TableCell>{entry.payroll.misc_reimbursement ? formatCurrency(entry.payroll.misc_reimbursement) : "$0.00"}</TableCell>
                                   <TableCell>{formatCurrency(regPay)}</TableCell>
                                   <TableCell>{formatCurrency(otPay)}</TableCell>
                                   <TableCell>{entry.miles.toFixed(1)}</TableCell>

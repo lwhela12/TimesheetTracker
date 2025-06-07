@@ -486,8 +486,10 @@ export default function TimesheetEntry() {
                         <TableHead>Reg Hours</TableHead>
                         <TableHead>OT Hours</TableHead>
                         <TableHead>PTO</TableHead>
-                        <TableHead>Holiday</TableHead>
+                        <TableHead>Holiday Worked</TableHead>
+                        <TableHead>Holiday Non-Worked</TableHead>
                         <TableHead>Misc Hours</TableHead>
+                        <TableHead>Misc Reimb</TableHead>
                         <TableHead>Miles</TableHead>
                         <TableHead>Pay</TableHead>
                         <TableHead>Status</TableHead>
@@ -529,12 +531,16 @@ export default function TimesheetEntry() {
                               {entry.pto_hours ? entry.pto_hours.toFixed(1) : "0.0"}
                             </TableCell>
                             <TableCell className="text-sm">
-                              {(entry.holiday_worked_hours || entry.holiday_non_worked_hours) 
-                                ? ((entry.holiday_worked_hours || 0) + (entry.holiday_non_worked_hours || 0)).toFixed(1) 
-                                : "0.0"}
+                              {entry.holiday_worked_hours ? entry.holiday_worked_hours.toFixed(1) : "0.0"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {entry.holiday_non_worked_hours ? entry.holiday_non_worked_hours.toFixed(1) : "0.0"}
                             </TableCell>
                             <TableCell className="text-sm">
                               {entry.misc_hours ? entry.misc_hours.toFixed(1) : "0.0"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {entry.misc_reimbursement ? formatCurrency(entry.misc_reimbursement) : "$0.00"}
                             </TableCell>
                             <TableCell className="text-sm">{entry.miles}</TableCell>
                             <TableCell className="text-sm">

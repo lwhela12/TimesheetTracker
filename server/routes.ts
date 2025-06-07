@@ -262,7 +262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Batch create punches (for weekly entry)
+  // Batch upsert punches (for weekly entry)
   app.post("/api/punches/batch", async (req, res) => {
     try {
       if (!req.isAuthenticated()) {
@@ -274,37 +274,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Entries must be an array" });
       }
       
-      const results = [];
-      const errors = [];
-      
-      // Process each entry
+      const results = [] as any[];
+      const errors = [] as any[];
+
       for (const entry of req.body.entries) {
         try {
-          // Ensure miles is not null
           const entryWithDefaults = {
             ...entry,
             miles: entry.miles ?? 0,
-            created_by: req.user.id
+            created_by: req.user.id,
           };
-          
-          const validatedData = insertPunchSchema.parse(entryWithDefaults);
-          
-          const newPunch = await storage.createPunch(validatedData);
-          
-          // Calculate payroll
-          const payroll = await storage.calculatePayroll(newPunch.id);
-          
-          // Log audit
-          await storage.addAuditLog({
-            table_name: "punches",
-            row_id: newPunch.id,
-            changed_by: req.user.id,
-            field: "all",
-            old_val: null,
-            new_val: JSON.stringify(newPunch)
-          });
-          
-          results.push({ ...newPunch, payroll });
+
+          const { id, ...data } = entryWithDefaults as any;
+
+          const existing = id
+            ? await storage.getPunch(id, req.user!.company_id)
+            : await storage.getPunchByEmployeeAndDate(entry.employee_id, entry.date);
+
+          if (existing) {
+            const validated = insertPunchSchema.partial().parse(data);
+            const updated = await storage.updatePunch(existing.id, validated, req.user!.company_id);
+            const payroll = await storage.calculatePayroll(existing.id);
+
+            for (const [key, value] of Object.entries(validated)) {
+              if (existing[key as keyof typeof existing] !== value) {
+                await storage.addAuditLog({
+                  table_name: "punches",
+                  row_id: existing.id,
+                  changed_by: req.user.id,
+                  field: key,
+                  old_val: String(existing[key as keyof typeof existing] ?? ""),
+                  new_val: String(value)
+                });
+              }
+            }
+
+            results.push({ ...updated, payroll });
+          } else {
+            const validated = insertPunchSchema.parse(data);
+            const newPunch = await storage.createPunch(validated);
+            const payroll = await storage.calculatePayroll(newPunch.id);
+
+            await storage.addAuditLog({
+              table_name: "punches",
+              row_id: newPunch.id,
+              changed_by: req.user.id,
+              field: "all",
+              old_val: null,
+              new_val: JSON.stringify(newPunch),
+            });
+
+            results.push({ ...newPunch, payroll });
+          }
         } catch (error) {
           if (error instanceof z.ZodError) {
             errors.push({ entry, errors: error.errors });
@@ -313,12 +334,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       }
-      
-      res.status(201).json({ 
+
+      res.status(201).json({
         success: results.length > 0,
-        message: `Created ${results.length} timesheet entries${errors.length > 0 ? ` with ${errors.length} errors` : ''}`,
+        message: `Processed ${results.length} timesheet entries${errors.length > 0 ? ` with ${errors.length} errors` : ''}`,
         results,
-        errors: errors.length > 0 ? errors : undefined
+        errors: errors.length > 0 ? errors : undefined,
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to process batch timesheet entries" });
@@ -854,8 +875,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (isNaN(parsedRate) || parsedRate < 0) {
           return res.status(400).json({ message: "Invalid mileage rate" });
         }
-        
+
+        const existing = await storage.getSetting(req.user.company_id, 'mileage_rate');
         const updated = await storage.updateSetting(req.user.company_id, 'mileage_rate', String(parsedRate));
+        await storage.addAuditLog({
+          table_name: 'settings',
+          row_id: updated.id,
+          changed_by: req.user.id,
+          field: 'mileage_rate',
+          old_val: existing?.value ?? null,
+          new_val: updated.value,
+        });
         updatedSettings.mileage_rate = updated;
       }
       
@@ -865,7 +895,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "Invalid overtime threshold" });
         }
         
+        const existingThreshold = await storage.getSetting(req.user.company_id, 'ot_threshold');
         const updated = await storage.updateSetting(req.user.company_id, 'ot_threshold', String(parsedThreshold));
+        await storage.addAuditLog({
+          table_name: 'settings',
+          row_id: updated.id,
+          changed_by: req.user.id,
+          field: 'ot_threshold',
+          old_val: existingThreshold?.value ?? null,
+          new_val: updated.value,
+        });
         updatedSettings.ot_threshold = updated;
       }
       
