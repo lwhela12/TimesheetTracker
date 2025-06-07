@@ -37,6 +37,7 @@ export interface IDatabase {
   
   // Punch operations
   getPunch(id: number, company_id: number): Promise<Punch | undefined>;
+  getPunchByEmployeeAndDate(employee_id: number, date: string): Promise<Punch | undefined>;
   getPunches(company_id: number, filter?: {
     employee_id?: number,
     from_date?: Date,
@@ -158,6 +159,14 @@ export class Database implements IDatabase {
       .innerJoin(employees, eq(punches.employee_id, employees.id))
       .where(and(eq(punches.id, id), eq(employees.company_id, company_id)));
     return punch.punches || undefined;
+  }
+
+  async getPunchByEmployeeAndDate(employee_id: number, date: string): Promise<Punch | undefined> {
+    const [punch] = await db
+      .select()
+      .from(punches)
+      .where(and(eq(punches.employee_id, employee_id), eq(punches.date, date)));
+    return punch || undefined;
   }
 
   async getPunches(company_id: number, filter?: {

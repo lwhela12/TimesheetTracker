@@ -429,20 +429,12 @@ function EmployeeDetailView({
     setEditingPunches(initialState);
   }, [punches]);
 
-  // Update punch mutation
-  const updatePunchMutation = useMutation({
-    mutationFn: async (punchData: any) => {
-      if (punchData.id) {
-        const res = await apiRequest("PUT", `/api/punches/${punchData.id}`, punchData);
-        return res.json();
-      } else {
-        const res = await apiRequest("POST", "/api/punches", {
-          ...punchData,
-          employee_id: employee.id
-        });
-        return res.json();
-      }
-    }
+  // Batch upsert punches
+  const batchMutation = useMutation({
+    mutationFn: async (entries: any[]) => {
+      const res = await apiRequest("POST", "/api/punches/batch", { entries });
+      return res.json();
+    },
   });
 
   const handleFieldChange = (date: string, field: string, value: any) => {
@@ -458,7 +450,9 @@ function EmployeeDetailView({
   };
 
   const saveChanges = async () => {
-    const promises = Object.values(editingPunches).map(punch => {
+    const entries: any[] = [];
+
+    Object.values(editingPunches).forEach(punch => {
       if (
         punch &&
         (
@@ -473,7 +467,7 @@ function EmployeeDetailView({
           punch.lunch_minutes
         )
       ) {
-        const cleanPunch = { ...punch };
+        const cleanPunch: any = { ...punch };
 
         if (cleanPunch.time_in === '') cleanPunch.time_in = null;
         if (cleanPunch.time_out === '') cleanPunch.time_out = null;
@@ -486,15 +480,18 @@ function EmployeeDetailView({
         if (cleanPunch.misc_reimbursement === '' || cleanPunch.misc_reimbursement === 0) cleanPunch.misc_reimbursement = null;
         if (cleanPunch.lunch_minutes === '' || cleanPunch.lunch_minutes === 0) cleanPunch.lunch_minutes = null;
 
-        return updatePunchMutation.mutateAsync(cleanPunch);
+        entries.push({ ...cleanPunch, employee_id: employee.id });
       }
-    }).filter(Boolean);
+    });
+
+    if (entries.length === 0) {
+      setHasChanges(false);
+      return;
+    }
 
     try {
-      await Promise.all(promises);
-      queryClient.invalidateQueries({
-        predicate: q => q.queryKey.some(key => typeof key === 'string' && key.includes('/api/punches'))
-      });
+      await batchMutation.mutateAsync(entries);
+      queryClient.invalidateQueries({ predicate: q => q.queryKey.some(key => typeof key === 'string' && key.includes('/api/punches')) });
       toast({ title: 'Success', description: 'Changes saved' });
       setHasChanges(false);
     } catch (error: any) {
@@ -524,12 +521,12 @@ function EmployeeDetailView({
       {/* Save Changes Button */}
       {hasChanges && (
         <div className="flex justify-end">
-          <Button 
+          <Button
             onClick={saveChanges}
-            disabled={updatePunchMutation.isPending}
+            disabled={batchMutation.isPending}
             className="bg-blue-600 hover:bg-blue-700"
           >
-            {updatePunchMutation.isPending ? "Saving..." : "Save Changes"}
+            {batchMutation.isPending ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       )}
