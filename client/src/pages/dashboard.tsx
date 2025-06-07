@@ -25,6 +25,8 @@ import {
   Map,
   Users,
   Loader2,
+  CheckCircle,
+  Calendar,
 } from "lucide-react";
 
 type Employee = {
@@ -80,6 +82,14 @@ type DashboardData = {
   }>;
   overtimeLeaders: OvertimeLeader[];
   recentEntries: TimesheetEntry[];
+  lastPayroll: {
+    totalHours: number;
+    overtimeHours: number;
+    ptoHours: number;
+    totalMileage: number;
+    employeesCompleted: number;
+    totalEmployees: number;
+  };
 };
 
 export default function Dashboard() {
@@ -303,6 +313,44 @@ export default function Dashboard() {
                   icon={<Users />}
                   iconBgColor="bg-green-100"
                   iconColor="text-green-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+                <MetricCard
+                  title="Payroll Completion"
+                  value={`${dashboardData.lastPayroll.employeesCompleted}/${dashboardData.lastPayroll.totalEmployees}`}
+                  icon={<CheckCircle />}
+                  iconBgColor="bg-green-100"
+                  iconColor="text-green-600"
+                />
+                <MetricCard
+                  title="Prev Hours"
+                  value={dashboardData.lastPayroll.totalHours.toFixed(1)}
+                  icon={<Clock />}
+                  iconBgColor="bg-neutral-100"
+                  iconColor="text-neutral-600"
+                />
+                <MetricCard
+                  title="Prev OT Hours"
+                  value={dashboardData.lastPayroll.overtimeHours.toFixed(1)}
+                  icon={<Clock />}
+                  iconBgColor="bg-amber-100"
+                  iconColor="text-amber-600"
+                />
+                <MetricCard
+                  title="Prev PTO Hours"
+                  value={dashboardData.lastPayroll.ptoHours.toFixed(1)}
+                  icon={<Calendar />}
+                  iconBgColor="bg-blue-100"
+                  iconColor="text-blue-600"
+                />
+                <MetricCard
+                  title="Prev Mileage"
+                  value={dashboardData.lastPayroll.totalMileage.toFixed(1)}
+                  icon={<Map />}
+                  iconBgColor="bg-indigo-100"
+                  iconColor="text-indigo-600"
                 />
               </div>
 

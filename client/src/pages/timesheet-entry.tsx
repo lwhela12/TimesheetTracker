@@ -134,9 +134,7 @@ export default function TimesheetEntry() {
     isLoading,
     refetch,
   } = useQuery<TimesheetEntry[]>({
-    queryKey: [
-      `/api/punches?page=${page}&limit=10&searchQuery=${encodeURIComponent(searchQuery)}`,
-    ],
+    queryKey: ["/api/punches", { page, limit: 10, searchQuery }],
   });
 
   // Fetch employees for dropdown

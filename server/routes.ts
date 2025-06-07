@@ -665,7 +665,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const overtimeLeaders = Object.values(overtimeByEmployee)
         .sort((a, b) => b.total_ot_hours - a.total_ot_hours)
         .slice(0, 5); // Top 5
-      
+
       // Get recent timesheet entries
       const recentEntries = await storage.getPunches(req.user.company_id, { limit: 5, page: 1 });
       recentEntries.sort((a, b) => {
@@ -688,6 +688,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         })
       );
+
+      // Previous payroll period metrics
+      const startSetting = await storage.getSetting(req.user.company_id, "work_week_start");
+      const weekStartDay = parseInt(startSetting?.value || "3", 10); // default Wednesday
+      const todayCopy = new Date();
+      const diffToStart = (todayCopy.getDay() - weekStartDay + 7) % 7;
+      const currentPeriodStart = new Date(todayCopy);
+      currentPeriodStart.setDate(todayCopy.getDate() - diffToStart);
+      currentPeriodStart.setHours(0, 0, 0, 0);
+      const prevPeriodStart = new Date(currentPeriodStart);
+      prevPeriodStart.setDate(currentPeriodStart.getDate() - 14);
+      const prevPeriodEnd = new Date(currentPeriodStart);
+      prevPeriodEnd.setDate(currentPeriodStart.getDate() - 1);
+
+      const prevSummaries = await storage.getPayrollForPeriod(
+        req.user.company_id,
+        prevPeriodStart,
+        prevPeriodEnd
+      );
+      const prevEmployees = await storage.getEmployees(req.user.company_id, { active: true });
+      const milesRateSetting = await storage.getSetting(req.user.company_id, "mileage_rate");
+      const mileRate = parseFloat(milesRateSetting?.value || "0.30");
+      const employeesWithEntries = new Set(prevSummaries.map(s => s.employee.id));
+      const lastTotals = prevSummaries.reduce(
+        (acc, s) => {
+          acc.hours += s.reg_hours + s.ot_hours;
+          acc.otHours += s.ot_hours;
+          acc.ptoHours += s.pto_hours;
+          acc.miles += mileRate > 0 ? s.mileage_pay / mileRate : 0;
+          return acc;
+        },
+        { hours: 0, otHours: 0, ptoHours: 0, miles: 0 }
+      );
       
       res.json({
         metrics: {
@@ -701,7 +734,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         weeklyPayrollData: weeklyData,
         overtimeLeaders,
-        recentEntries: enrichedRecentEntries
+        recentEntries: enrichedRecentEntries,
+        lastPayroll: {
+          totalHours: lastTotals.hours,
+          overtimeHours: lastTotals.otHours,
+          ptoHours: lastTotals.ptoHours,
+          totalMileage: lastTotals.miles,
+          employeesCompleted: employeesWithEntries.size,
+          totalEmployees: prevEmployees.length
+        }
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to generate dashboard data" });
@@ -722,16 +763,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startDate = new Date(req.query.start_date as string);
       const endDate = new Date(req.query.end_date as string);
 
-      const payrollSummaries = await storage.getPayrollForPeriod(
-        req.user.company_id,
-        startDate,
-        endDate
-      );
+      const [employees, summaries, mileageSetting] = await Promise.all([
+        storage.getEmployees(req.user.company_id, { active: true }),
+        storage.getPayrollForPeriod(req.user.company_id, startDate, endDate),
+        storage.getSetting(req.user.company_id, "mileage_rate")
+      ]);
+
+      const mileageRate = parseFloat(mileageSetting?.value || "0.30");
+      const summaryMap = new Map<number, any>();
+      for (const s of summaries) {
+        summaryMap.set(s.employee.id, s);
+      }
+
+      const employeeSummaries = employees.map(emp => {
+        const s = summaryMap.get(emp.id);
+        if (s) {
+          return {
+            employee_id: emp.id,
+            employee: emp,
+            total_hours: s.reg_hours + s.ot_hours,
+            pto_hours: s.pto_hours,
+            holiday_worked_hours: s.holiday_worked_hours,
+            holiday_non_worked_hours: s.holiday_non_worked_hours,
+            overtime_hours: s.ot_hours,
+            total_miles: mileageRate > 0 ? s.mileage_pay / mileageRate : 0,
+            misc_reimbursement: s.misc_reimbursement,
+            regular_pay: s.reg_pay + s.misc_hours_pay,
+            overtime_pay: s.ot_pay,
+            pto_pay: s.pto_pay,
+            holiday_pay: s.holiday_worked_pay + s.holiday_non_worked_pay,
+            mileage_pay: s.mileage_pay,
+            total_pay: s.total_pay,
+            has_entries: true
+          };
+        }
+        return {
+          employee_id: emp.id,
+          employee: emp,
+          total_hours: 0,
+          pto_hours: 0,
+          holiday_worked_hours: 0,
+          holiday_non_worked_hours: 0,
+          overtime_hours: 0,
+          total_miles: 0,
+          misc_reimbursement: 0,
+          regular_pay: 0,
+          overtime_pay: 0,
+          pto_pay: 0,
+          holiday_pay: 0,
+          mileage_pay: 0,
+          total_pay: 0,
+          has_entries: false
+        };
+      });
 
       res.json({
         start_date: req.query.start_date,
         end_date: req.query.end_date,
-        employees: payrollSummaries
+        employees: employeeSummaries
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch payroll period data" });
