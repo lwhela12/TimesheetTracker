@@ -412,25 +412,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fromDate = new Date(req.query.from_date as string);
       const toDate = new Date(req.query.to_date as string);
       
-      const report = await storage.getPayrollReport(req.user!.company_id, fromDate, toDate);
+      const report = await storage.getPayrollForPeriod(req.user!.company_id, fromDate, toDate);
       
       // Format for CSV if requested
       if (req.query.format === 'csv') {
-        let csv = 'Date,Employee,Regular Hours,Overtime Hours,Regular Pay,Overtime Pay,Mileage Pay,Total Pay\n';
-        
+        let csv = 'Employee,Regular Hours,Overtime Hours,Regular Pay,Overtime Pay,Mileage Pay,Total Pay\n';
+
         for (const entry of report) {
-          const regPay = entry.payroll.pay - (entry.payroll.ot_hours * entry.employee.rate * 1.5);
-          const otPay = entry.payroll.ot_hours * entry.employee.rate * 1.5;
-          
           csv += [
-            entry.date,
             `${entry.employee.first_name} ${entry.employee.last_name}`,
-            entry.payroll.reg_hours,
-            entry.payroll.ot_hours,
-            regPay.toFixed(2),
-            otPay.toFixed(2),
-            entry.payroll.mileage_pay.toFixed(2),
-            (entry.payroll.pay + entry.payroll.mileage_pay).toFixed(2)
+            entry.reg_hours,
+            entry.ot_hours,
+            entry.reg_pay.toFixed(2),
+            entry.ot_pay.toFixed(2),
+            entry.mileage_pay.toFixed(2),
+            entry.total_pay.toFixed(2)
           ].join(',') + '\n';
         }
         
@@ -458,7 +454,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fromDate = new Date(req.query.from_date as string);
       const toDate = new Date(req.query.to_date as string);
       
-      const report = await storage.getPayrollReport(req.user!.company_id, fromDate, toDate);
+      const report = await storage.getPayrollForPeriod(req.user!.company_id, fromDate, toDate);
       
       // Group by employee and sum up overtime
       const overtimeByEmployee: Record<number, {
@@ -476,8 +472,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         }
         
-        overtimeByEmployee[entry.employee.id].total_ot_hours += entry.payroll.ot_hours;
-        overtimeByEmployee[entry.employee.id].total_ot_pay += entry.payroll.ot_hours * entry.employee.rate * 1.5;
+        overtimeByEmployee[entry.employee.id].total_ot_hours += entry.ot_hours;
+        overtimeByEmployee[entry.employee.id].total_ot_pay += entry.ot_pay;
       }
       
       // Convert to array and sort by overtime hours
@@ -705,77 +701,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startDate = new Date(req.query.start_date as string);
       const endDate = new Date(req.query.end_date as string);
 
-      // Get all active employees
-      const employees = await storage.getEmployees(req.user.company_id, { active: true });
-
-      // Get all punches for the period
-      const punches = await storage.getPunches(req.user.company_id, {
-        from_date: startDate,
-        to_date: endDate
-      });
-
-      // Calculate payroll summary for each employee
-      const payrollSummaries = await Promise.all(
-        employees.map(async (employee) => {
-          const employeePunches = punches.filter(p => p.employee_id === employee.id);
-          
-          let totalHours = 0;
-          let ptoHours = 0;
-          let holidayWorkedHours = 0;
-          let holidayNonWorkedHours = 0;
-          let overtimeHours = 0;
-          let totalMiles = 0;
-          let miscReimbursement = 0;
-          let regularPay = 0;
-          let overtimePay = 0;
-          let ptoPay = 0;
-          let holidayPay = 0;
-          let mileagePay = 0;
-          let totalPay = 0;
-
-          if (employeePunches.length > 0) {
-            for (const punch of employeePunches) {
-              try {
-                const payroll = await storage.calculatePayroll(punch.id);
-                
-                totalHours += payroll.reg_hours + payroll.ot_hours;
-                ptoHours += payroll.pto_hours || 0;
-                holidayWorkedHours += payroll.holiday_worked_hours || 0;
-                holidayNonWorkedHours += payroll.holiday_non_worked_hours || 0;
-                overtimeHours += payroll.ot_hours;
-                totalMiles += punch.miles;
-                miscReimbursement += payroll.misc_reimbursement || 0;
-                regularPay += payroll.reg_pay;
-                overtimePay += payroll.ot_pay;
-                ptoPay += payroll.pto_pay || 0;
-                holidayPay += payroll.holiday_worked_pay || 0;
-                mileagePay += payroll.mileage_pay;
-                totalPay += payroll.total_pay;
-              } catch (error) {
-                // Skip if payroll calculation fails
-              }
-            }
-          }
-
-          return {
-            employee_id: employee.id,
-            employee,
-            total_hours: totalHours,
-            pto_hours: ptoHours,
-            holiday_worked_hours: holidayWorkedHours,
-            holiday_non_worked_hours: holidayNonWorkedHours,
-            overtime_hours: overtimeHours,
-            total_miles: totalMiles,
-            misc_reimbursement: miscReimbursement,
-            regular_pay: regularPay,
-            overtime_pay: overtimePay,
-            pto_pay: ptoPay,
-            holiday_pay: holidayPay,
-            mileage_pay: mileagePay,
-            total_pay: totalPay,
-            has_entries: employeePunches.length > 0
-          };
-        })
+      const payrollSummaries = await storage.getPayrollForPeriod(
+        req.user.company_id,
+        startDate,
+        endDate
       );
 
       res.json({
