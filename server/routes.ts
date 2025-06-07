@@ -6,6 +6,7 @@ import { z } from "zod";
 import { insertEmployeeSchema, insertPunchSchema, punches, employees, settings } from "@shared/schema";
 import { db } from "./db";
 import { and, gte, lte, eq } from "drizzle-orm";
+import { queryClient } from "@/lib/queryClient";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -265,83 +266,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Batch upsert punches (for weekly entry)
   app.post("/api/punches/batch", async (req, res) => {
     try {
-      if (!req.isAuthenticated()) {
+      if (!req.isAuthenticated() || !req.user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
-      // Validate that entries is an array
-      if (!Array.isArray(req.body.entries)) {
-        return res.status(400).json({ message: "Entries must be an array" });
+
+      const { entries } = req.body;
+
+      if (!Array.isArray(entries) || entries.length === 0) {
+        return res.status(200).json({ message: "No entries to process." });
       }
-      
-      const results = [] as any[];
-      const errors = [] as any[];
 
-      for (const entry of req.body.entries) {
-        try {
-          const entryWithDefaults = {
-            ...entry,
-            miles: entry.miles ?? 0,
-            created_by: req.user.id,
-          };
+      const employeeId = entries[0].employee_id;
+      const dates = entries.map(e => new Date(e.date));
+      const fromDate = new Date(Math.min.apply(null, dates.map(d => d.getTime())));
+      const toDate = new Date(Math.max.apply(null, dates.map(d => d.getTime())));
 
-          const { id, ...data } = entryWithDefaults as any;
+      const fromDateStr = fromDate.toISOString().split('T')[0];
+      const toDateStr = toDate.toISOString().split('T')[0];
 
-          const existing = id
-            ? await storage.getPunch(id, req.user!.company_id)
-            : await storage.getPunchByEmployeeAndDate(entry.employee_id, entry.date);
+      await db.transaction(async (tx) => {
+        await tx.delete(punches)
+          .where(and(
+            eq(punches.employee_id, employeeId),
+            gte(punches.date, fromDateStr),
+            lte(punches.date, toDateStr)
+          ));
 
-          if (existing) {
-            const validated = insertPunchSchema.partial().parse(data);
-            const updated = await storage.updatePunch(existing.id, validated, req.user!.company_id);
-            const payroll = await storage.calculatePayroll(existing.id);
+        const validEntries = entries.filter((e: any) =>
+          (e.time_in && e.time_out) || e.pto_hours || e.holiday_worked_hours || e.holiday_non_worked_hours || e.misc_hours
+        ).map((e: any) => ({
+          ...e,
+          created_by: req.user!.id
+        }));
 
-            for (const [key, value] of Object.entries(validated)) {
-              if (existing[key as keyof typeof existing] !== value) {
-                await storage.addAuditLog({
-                  table_name: "punches",
-                  row_id: existing.id,
-                  changed_by: req.user.id,
-                  field: key,
-                  old_val: String(existing[key as keyof typeof existing] ?? ""),
-                  new_val: String(value)
-                });
-              }
-            }
-
-            results.push({ ...updated, payroll });
-          } else {
-            const validated = insertPunchSchema.parse(data);
-            const newPunch = await storage.createPunch(validated);
-            const payroll = await storage.calculatePayroll(newPunch.id);
-
-            await storage.addAuditLog({
-              table_name: "punches",
-              row_id: newPunch.id,
-              changed_by: req.user.id,
-              field: "all",
-              old_val: null,
-              new_val: JSON.stringify(newPunch),
-            });
-
-            results.push({ ...newPunch, payroll });
-          }
-        } catch (error) {
-          if (error instanceof z.ZodError) {
-            errors.push({ entry, errors: error.errors });
-          } else {
-            errors.push({ entry, message: "Failed to process entry" });
-          }
+        if (validEntries.length > 0) {
+          const validatedData = z.array(insertPunchSchema).parse(validEntries);
+          await tx.insert(punches).values(validatedData);
         }
-      }
-
-      res.status(201).json({
-        success: results.length > 0,
-        message: `Processed ${results.length} timesheet entries${errors.length > 0 ? ` with ${errors.length} errors` : ''}`,
-        results,
-        errors: errors.length > 0 ? errors : undefined,
       });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/punches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll/period"] });
+
+      res.status(201).json({ message: "Timesheet submitted successfully." });
+
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid timesheet data", errors: error.errors });
+      }
+      console.error("Batch update error:", error);
       res.status(500).json({ message: "Failed to process batch timesheet entries" });
     }
   });
