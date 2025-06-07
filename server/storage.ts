@@ -332,15 +332,16 @@ export class Database implements IDatabase {
 
 
   async getPayrollForPeriod(company_id: number, from_date: Date, to_date: Date): Promise<any[]> {
-    const weekStartSetting = await this.getSetting(company_id, 'work_week_start_day');
+    // 1. Fetch all necessary data
+    const weekStartSetting = await this.getSetting(company_id, 'work_week_start');
     const otSetting = await this.getSetting(company_id, 'ot_threshold');
     const mileageRateSetting = await this.getSetting(company_id, 'mileage_rate');
 
-    const weekStartDay = parseInt(weekStartSetting?.value || '0', 10); // 0=Sunday
+    const weekStartDay = parseInt(weekStartSetting?.value || '3', 10); // 0=Sun, 1=Mon... 3=Wed
     const otThreshold = parseFloat(otSetting?.value || '40');
     const mileageRate = parseFloat(mileageRateSetting?.value || '0.30');
 
-    const rows = await db.select({ punch: punches, employee: employees })
+    const companyPunches = await db.select({ punch: punches, employee: employees })
       .from(punches)
       .innerJoin(employees, eq(punches.employee_id, employees.id))
       .where(and(
@@ -349,78 +350,94 @@ export class Database implements IDatabase {
         lte(punches.date, to_date.toISOString().split('T')[0])
       ));
 
-    const weeklyBuckets = new Map<string, { employee: Employee; worked: number; pto: number; holidayW: number; holidayNW: number; misc: number; miles: number; reimb: number }>();
+    // 2. Group punches by employee and then by work week
+    const employeeWeeklyBuckets = new Map<number, Map<string, any[]>>();
 
-    for (const row of rows) {
-      const { punch, employee } = row;
-      const dateObj = new Date(punch.date);
-      const diff = (dateObj.getDay() - weekStartDay + 7) % 7;
-      const weekStart = new Date(dateObj);
-      weekStart.setDate(dateObj.getDate() - diff);
-      weekStart.setHours(0,0,0,0);
-      const key = `${employee.id}-${weekStart.toISOString()}`;
-
-      const timeIn = punch.time_in ? new Date(`1970-01-01T${punch.time_in}`) : null;
-      const timeOut = punch.time_out ? new Date(`1970-01-01T${punch.time_out}`) : null;
-      let workedHours = 0;
-      if (timeIn && timeOut) {
-        workedHours = (timeOut.getTime() - timeIn.getTime())/60000;
-        workedHours -= punch.lunch_minutes || 0;
-        workedHours = workedHours/60;
+    for (const { punch, employee } of companyPunches) {
+      if (!employeeWeeklyBuckets.has(employee.id)) {
+        employeeWeeklyBuckets.set(employee.id, new Map());
       }
 
-      let bucket = weeklyBuckets.get(key);
-      if (!bucket) {
-        bucket = { employee, worked:0, pto:0, holidayW:0, holidayNW:0, misc:0, miles:0, reimb:0 };
-        weeklyBuckets.set(key, bucket);
-      }
-      bucket.worked += workedHours;
-      bucket.pto += punch.pto_hours || 0;
-      bucket.holidayW += punch.holiday_worked_hours || 0;
-      bucket.holidayNW += punch.holiday_non_worked_hours || 0;
-      bucket.misc += punch.misc_hours || 0;
-      bucket.miles += punch.miles || 0;
-      bucket.reimb += punch.misc_reimbursement || 0;
+      const dateObj = new Date(punch.date + 'T00:00:00');
+      const dayOfWeek = dateObj.getDay();
+      const diff = (dayOfWeek - weekStartDay + 7) % 7;
+      const weekStartDate = new Date(dateObj);
+      weekStartDate.setDate(dateObj.getDate() - diff);
+      const weekStartKey = weekStartDate.toISOString().split('T')[0];
+
+      const weekPunches = employeeWeeklyBuckets.get(employee.id)!.get(weekStartKey) || [];
+      weekPunches.push(punch);
+      employeeWeeklyBuckets.get(employee.id)!.set(weekStartKey, weekPunches);
     }
 
-    const totalsMap = new Map<number, any>();
+    // 3. Calculate payroll for each employee
+    const finalReport = [];
 
-    for (const bucket of weeklyBuckets.values()) {
-      const emp = bucket.employee;
-      const regHours = Math.min(bucket.worked, otThreshold);
-      const otHours = Math.max(0, bucket.worked - otThreshold);
-      const regPay = regHours * emp.rate;
-      const otPay = otHours * emp.rate * 1.5;
-      const ptoPay = bucket.pto * emp.rate;
-      const holidayWorkedPay = bucket.holidayW * emp.rate * 1.5;
-      const holidayNonWorkedPay = bucket.holidayNW * emp.rate;
-      const miscPay = bucket.misc * emp.rate;
-      const mileagePay = bucket.miles * mileageRate;
-      const totalPay = regPay + otPay + ptoPay + holidayWorkedPay + holidayNonWorkedPay + miscPay + mileagePay + bucket.reimb;
+    for (const [employeeId, weeklyBuckets] of employeeWeeklyBuckets.entries()) {
+      const employee = (await this.getEmployee(employeeId, company_id))!;
+      let periodTotals = {
+          employee, reg_hours: 0, ot_hours: 0, pto_hours: 0, holiday_worked_hours: 0, 
+          holiday_non_worked_hours: 0, misc_hours: 0, reg_pay: 0, ot_pay: 0, pto_pay: 0, 
+          holiday_worked_pay: 0, holiday_non_worked_pay: 0, misc_hours_pay: 0, mileage_pay: 0,
+          misc_reimbursement: 0, total_pay: 0
+      };
 
-      let tot = totalsMap.get(emp.id);
-      if (!tot) {
-        tot = { employee: emp, reg_hours:0, ot_hours:0, pto_hours:0, holiday_worked_hours:0, holiday_non_worked_hours:0, misc_hours:0, reg_pay:0, ot_pay:0, pto_pay:0, holiday_worked_pay:0, holiday_non_worked_pay:0, misc_hours_pay:0, mileage_pay:0, misc_reimbursement:0, total_pay:0 };
-        totalsMap.set(emp.id, tot);
+      for (const punchesInWeek of weeklyBuckets.values()) {
+        let weeklyWorkedHours = 0;
+        let weeklyPtoHours = 0;
+        let weeklyHolidayWorkedHours = 0;
+        let weeklyHolidayNonWorkedHours = 0;
+        let weeklyMiscHours = 0;
+        let weeklyMiles = 0;
+        let weeklyMiscReimbursement = 0;
+
+        for (const punch of punchesInWeek) {
+          if (punch.time_in && punch.time_out) {
+            const timeIn = new Date(`1970-01-01T${punch.time_in}`);
+            const timeOut = new Date(`1970-01-01T${punch.time_out}`);
+            const workedMinutes = (timeOut.getTime() - timeIn.getTime()) / 60000 - (punch.lunch_minutes || 0);
+            weeklyWorkedHours += (workedMinutes > 0 ? workedMinutes / 60 : 0);
+          }
+          weeklyPtoHours += punch.pto_hours || 0;
+          weeklyHolidayWorkedHours += punch.holiday_worked_hours || 0;
+          weeklyHolidayNonWorkedHours += punch.holiday_non_worked_hours || 0;
+          weeklyMiscHours += punch.misc_hours || 0;
+          weeklyMiles += punch.miles || 0;
+          weeklyMiscReimbursement += punch.misc_reimbursement || 0;
+        }
+
+        const regHours = Math.min(weeklyWorkedHours, otThreshold);
+        const otHours = Math.max(0, weeklyWorkedHours - otThreshold);
+        
+        periodTotals.reg_hours += regHours;
+        periodTotals.ot_hours += otHours;
+        periodTotals.pto_hours += weeklyPtoHours;
+        periodTotals.holiday_worked_hours += weeklyHolidayWorkedHours;
+        periodTotals.holiday_non_worked_hours += weeklyHolidayNonWorkedHours;
+        periodTotals.misc_hours += weeklyMiscHours;
+        periodTotals.misc_reimbursement += weeklyMiscReimbursement;
+
+        const regPay = regHours * employee.rate;
+        const otPay = otHours * employee.rate * 1.5;
+        const ptoPay = weeklyPtoHours * employee.rate;
+        const holidayWorkedPay = weeklyHolidayWorkedHours * employee.rate * 1.5;
+        const holidayNonWorkedPay = weeklyHolidayNonWorkedHours * employee.rate;
+        const miscPay = weeklyMiscHours * employee.rate;
+        const mileagePay = weeklyMiles * mileageRate;
+
+        periodTotals.reg_pay += regPay;
+        periodTotals.ot_pay += otPay;
+        periodTotals.pto_pay += ptoPay;
+        periodTotals.holiday_worked_pay += holidayWorkedPay;
+        periodTotals.holiday_non_worked_pay += holidayNonWorkedPay;
+        periodTotals.misc_hours_pay += miscPay;
+        periodTotals.mileage_pay += mileagePay;
+        periodTotals.total_pay += regPay + otPay + ptoPay + holidayWorkedPay + holidayNonWorkedPay + miscPay + mileagePay + weeklyMiscReimbursement;
       }
-      tot.reg_hours += regHours;
-      tot.ot_hours += otHours;
-      tot.pto_hours += bucket.pto;
-      tot.holiday_worked_hours += bucket.holidayW;
-      tot.holiday_non_worked_hours += bucket.holidayNW;
-      tot.misc_hours += bucket.misc;
-      tot.reg_pay += regPay;
-      tot.ot_pay += otPay;
-      tot.pto_pay += ptoPay;
-      tot.holiday_worked_pay += holidayWorkedPay;
-      tot.holiday_non_worked_pay += holidayNonWorkedPay;
-      tot.misc_hours_pay += miscPay;
-      tot.mileage_pay += mileagePay;
-      tot.misc_reimbursement += bucket.reimb;
-      tot.total_pay += totalPay;
+      finalReport.push(periodTotals);
     }
-
-    return Array.from(totalsMap.values());
+    
+    return finalReport;
   }
   // Audit log operations
   async addAuditLog(log: InsertAuditLog): Promise<AuditLog> {
