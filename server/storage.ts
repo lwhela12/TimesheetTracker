@@ -8,13 +8,17 @@ import {
   settings, type Setting, type InsertSetting
 } from "@shared/schema";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import connectPg from "connect-pg-simple";
+import { db, pool } from "./db";
+import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 
-const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
+
+
 
 // modify the interface with any CRUD methods
 // you might need
-export interface IStorage {
+export interface IDatabase {
   // User operations
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -48,7 +52,7 @@ export interface IStorage {
   
   // Payroll calculation operations
   calculatePayroll(punch_id: number): Promise<PayrollCalc>;
-  getPayrollReport(company_id: number, from_date: Date, to_date: Date): Promise<Array<Punch & { employee: Employee, payroll: PayrollCalc }>>;
+  getPayrollForPeriod(company_id: number, from_date: Date, to_date: Date): Promise<any[]>;
   
   // Audit log operations
   addAuditLog(log: InsertAuditLog): Promise<AuditLog>;
@@ -62,144 +66,101 @@ export interface IStorage {
   sessionStore: session.SessionStore;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private employees: Map<number, Employee>;
-  private punches: Map<number, Punch>;
-  private payroll_calcs: Map<number, PayrollCalc>;
-  private audit_logs: Map<number, AuditLog>;
-  private settings: Map<string, Setting>;
-  private userId: number;
-  private employeeId: number;
-  private punchId: number;
-  private payrollCalcId: number;
-  private auditLogId: number;
-  private settingId: number;
+export class Database implements IDatabase {
   sessionStore: session.SessionStore;
 
   constructor() {
-    this.users = new Map();
-    this.employees = new Map();
-    this.punches = new Map();
-    this.payroll_calcs = new Map();
-    this.audit_logs = new Map();
-    this.settings = new Map();
-    this.userId = 1;
-    this.employeeId = 1;
-    this.punchId = 1;
-    this.payrollCalcId = 1;
-    this.auditLogId = 1;
-    this.settingId = 1;
-
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000,
-    });
-
-    // Add default settings
-    this.settings.set('mileage_rate', {
-      id: this.settingId++,
-      key: 'mileage_rate',
-      value: '0.30',
-      updated_at: new Date()
-    });
-    this.settings.set('ot_threshold', {
-      id: this.settingId++,
-      key: 'ot_threshold',
-      value: '40', // 40 hours per week for overtime
-      updated_at: new Date()
+    this.sessionStore = new PostgresSessionStore({ 
+      pool, 
+      createTableIfMissing: true 
     });
   }
 
-  // User methods
+  // Company operations
+  async getCompany(id: number): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    return company || undefined;
+  }
+
+  async createCompany(company: InsertCompany): Promise<Company> {
+    const [newCompany] = await db.insert(companies).values(company).returning();
+    return newCompany;
+  }
+
+  // User operations
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userId++;
-    const user: User = { 
-      ...insertUser, 
-      id,
-      created_at: new Date() 
-    };
-    this.users.set(id, user);
-    return user;
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
   }
 
-  // Employee methods
-  async getEmployee(id: number, company_id?: number): Promise<Employee | undefined> {
-    return this.employees.get(id);
+  // Employee operations
+  async getEmployee(id: number, company_id: number): Promise<Employee | undefined> {
+    const [employee] = await db.select().from(employees)
+      .where(and(eq(employees.id, id), eq(employees.company_id, company_id)));
+    return employee || undefined;
   }
 
-
-  async getEmployees(filter?: { active?: boolean; searchQuery?: string; page?: number; limit?: number }): Promise<Employee[]> {
-    let result = Array.from(this.employees.values());
-
+  async getEmployees(company_id: number, filter?: { active?: boolean; searchQuery?: string; page?: number; limit?: number }): Promise<Employee[]> {
+    let query = db.select().from(employees).where(eq(employees.company_id, company_id));
 
     if (filter?.active !== undefined) {
-      result = result.filter(emp => emp.active === filter.active);
+      query = query.where(and(eq(employees.company_id, company_id), eq(employees.active, filter.active)));
     }
 
     if (filter?.searchQuery) {
-      const q = filter.searchQuery.toLowerCase();
-      result = result.filter(e => `${e.first_name} ${e.last_name}`.toLowerCase().includes(q));
+      const q = `%${filter.searchQuery.toLowerCase()}%`;
+      query = query.where(and(eq(employees.company_id, company_id), sql`lower(${employees.first_name} || ' ' || ${employees.last_name}) like ${q}`));
     }
 
+    if (filter?.limit !== undefined) {
+      query = query.limit(filter.limit);
+    }
     if (filter?.page !== undefined && filter?.limit !== undefined) {
-      const start = (filter.page - 1) * filter.limit;
-      result = result.slice(start, start + filter.limit);
+      query = query.offset((filter.page - 1) * filter.limit);
     }
 
-    return result;
+    return await query;
   }
 
-  async createEmployee(insertEmployee: InsertEmployee): Promise<Employee> {
-    const id = this.employeeId++;
-    const employee: Employee = {
-      ...insertEmployee,
-      id,
-      created_at: new Date()
-    };
-    this.employees.set(id, employee);
-    return employee;
+  async createEmployee(employee: InsertEmployee): Promise<Employee> {
+    const [newEmployee] = await db.insert(employees).values(employee).returning();
+    return newEmployee;
   }
 
-  async updateEmployee(id: number, update: Partial<InsertEmployee>, company_id?: number): Promise<Employee | undefined> {
-    const employee = this.employees.get(id);
-    if (!employee) return undefined;
-    
-    const updatedEmployee = {
-      ...employee,
-      ...update
-    };
-    
-    this.employees.set(id, updatedEmployee);
-    return updatedEmployee;
+  async updateEmployee(id: number, employee: Partial<InsertEmployee>, company_id: number): Promise<Employee | undefined> {
+    const [updated] = await db.update(employees)
+      .set(employee)
+      .where(and(eq(employees.id, id), eq(employees.company_id, company_id)))
+      .returning();
+    return updated || undefined;
   }
 
-  async deleteEmployee(id: number, company_id?: number): Promise<boolean> {
-    const exists = this.employees.has(id);
-    if (exists) {
-      // Instead of deleting, set active to false
-      const employee = this.employees.get(id)!;
-      this.employees.set(id, { ...employee, active: false });
-    }
-    return exists;
+  async deleteEmployee(id: number, company_id: number): Promise<boolean> {
+    const result = await db.delete(employees)
+      .where(and(eq(employees.id, id), eq(employees.company_id, company_id)));
+    return (result.rowCount ?? 0) > 0;
   }
 
-  // Punch methods
-  async getPunch(id: number, company_id?: number): Promise<Punch | undefined> {
-    return this.punches.get(id);
+  // Punch operations - filter by employee's company
+  async getPunch(id: number, company_id: number): Promise<Punch | undefined> {
+    const [punch] = await db.select()
+      .from(punches)
+      .innerJoin(employees, eq(punches.employee_id, employees.id))
+      .where(and(eq(punches.id, id), eq(employees.company_id, company_id)));
+    return punch.punches || undefined;
   }
 
-
-  async getPunches(filter?: {
+  async getPunches(company_id: number, filter?: {
     employee_id?: number,
     from_date?: Date,
     to_date?: Date,
@@ -208,310 +169,293 @@ export class MemStorage implements IStorage {
     page?: number,
     limit?: number
   }): Promise<Punch[]> {
-    let punches = Array.from(this.punches.values());
-    
-    if (filter?.employee_id !== undefined) {
-      punches = punches.filter(punch => punch.employee_id === filter.employee_id);
+    let query = db.select({ punches })
+      .from(punches)
+      .innerJoin(employees, eq(punches.employee_id, employees.id))
+      .where(eq(employees.company_id, company_id));
+
+    if (filter?.employee_id) {
+      query = query.where(and(
+        eq(employees.company_id, company_id), 
+        eq(punches.employee_id, filter.employee_id)
+      ));
     }
-    
+
     if (filter?.from_date) {
-      punches = punches.filter(punch => {
-        const punchDate = new Date(punch.date);
-        return punchDate >= filter.from_date!;
-      });
+      query = query.where(and(
+        eq(employees.company_id, company_id),
+        gte(punches.date, filter.from_date.toISOString().split('T')[0])
+      ));
     }
-    
+
     if (filter?.to_date) {
-      punches = punches.filter(punch => {
-        const punchDate = new Date(punch.date);
-        return punchDate <= filter.to_date!;
-      });
+      query = query.where(and(
+        eq(employees.company_id, company_id),
+        lte(punches.date, filter.to_date.toISOString().split('T')[0])
+      ));
     }
-    
+
     if (filter?.status) {
-      punches = punches.filter(punch => punch.status === filter.status);
+      query = query.where(and(
+        eq(employees.company_id, company_id),
+        eq(punches.status, filter.status)
+      ));
     }
 
     if (filter?.searchQuery) {
-      const q = filter.searchQuery.toLowerCase();
-      punches = punches.filter(p => String(p.date).includes(q));
+      const q = `%${filter.searchQuery.toLowerCase()}%`;
+      query = query.where(sql`cast(${punches.date} as text) like ${q}`);
     }
 
+    if (filter?.limit !== undefined) {
+      query = query.limit(filter.limit);
+    }
     if (filter?.page !== undefined && filter?.limit !== undefined) {
-      const start = (filter.page - 1) * filter.limit;
-      punches = punches.slice(start, start + filter.limit);
+      query = query.offset((filter.page - 1) * filter.limit);
     }
 
-    return punches;
+    const results = await query.orderBy(desc(punches.created_at));
+    return results.map(r => r.punches);
   }
 
-  async createPunch(insertPunch: InsertPunch): Promise<Punch> {
-    const id = this.punchId++;
-    const punch: Punch = {
-      ...insertPunch,
-      id,
-      created_at: new Date()
-    };
-    this.punches.set(id, punch);
-    
-    // Automatically calculate payroll for this punch
-    await this.calculatePayroll(id);
-    
-    return punch;
+  async createPunch(punch: InsertPunch): Promise<Punch> {
+    const [newPunch] = await db.insert(punches).values(punch).returning();
+    return newPunch;
   }
 
-  async updatePunch(id: number, update: Partial<InsertPunch>): Promise<Punch | undefined> {
-    const punch = this.punches.get(id);
-    if (!punch) return undefined;
-    
-    const updatedPunch = {
-      ...punch,
-      ...update
-    };
-    
-    this.punches.set(id, updatedPunch);
-    
-    // Recalculate payroll when a punch is updated
-    await this.calculatePayroll(id);
-    
-    return updatedPunch;
+  async updatePunch(id: number, punch: Partial<InsertPunch>, company_id: number): Promise<Punch | undefined> {
+    const [updated] = await db.update(punches)
+      .set(punch)
+      .from(employees)
+      .where(and(
+        eq(punches.id, id), 
+        eq(punches.employee_id, employees.id),
+        eq(employees.company_id, company_id)
+      ))
+      .returning();
+    return updated || undefined;
   }
 
-  async deletePunch(id: number): Promise<boolean> {
-    const exists = this.punches.has(id);
-    if (exists) {
-      this.punches.delete(id);
-      
-      // Remove associated payroll calculation
-      for (const [calcId, calc] of this.payroll_calcs.entries()) {
-        if (calc.punch_id === id) {
-          this.payroll_calcs.delete(calcId);
-          break;
-        }
-      }
-    }
-    return exists;
+  async deletePunch(id: number, company_id: number): Promise<boolean> {
+    const result = await db.delete(punches)
+      .using(employees)
+      .where(and(
+        eq(punches.id, id),
+        eq(punches.employee_id, employees.id),
+        eq(employees.company_id, company_id)
+      ));
+    return (result.rowCount ?? 0) > 0;
   }
 
-  // Payroll calculation methods
+  // Payroll calculation operations
   async calculatePayroll(punch_id: number): Promise<PayrollCalc> {
-    const punch = this.punches.get(punch_id);
-    if (!punch) {
-      throw new Error(`Punch with id ${punch_id} not found`);
-    }
-    
-    const employee = this.employees.get(punch.employee_id);
-    if (!employee) {
-      throw new Error(`Employee with id ${punch.employee_id} not found`);
-    }
-    
-    // Get mileage rate from settings
-    const mileageRateSetting = await this.getSetting('mileage_rate');
-    const mileageRate = parseFloat(mileageRateSetting?.value || '0.30');
-    
-    // Get overtime threshold from settings
-    const otThresholdSetting = await this.getSetting('ot_threshold');
-    const otThreshold = parseFloat(otThresholdSetting?.value || '40');
-    
-    // Get holiday rate multiplier from settings (default to 1.5x if not set)
-    const holidayRateMultiplierSetting = await this.getSetting('holiday_rate_multiplier');
-    const holidayRateMultiplier = parseFloat(holidayRateMultiplierSetting?.value || '1.5');
-    
-    // Calculate hours worked from time in/out (if present)
-    let regHours = 0;
-    let otHours = 0;
-    
-    if (punch.time_in && punch.time_out) {
-      const timeIn = new Date(`1970-01-01T${punch.time_in}`);
-      const timeOut = new Date(`1970-01-01T${punch.time_out}`);
-      
-      let totalMinutes = (timeOut.getTime() - timeIn.getTime()) / 60000 - (punch.lunch_minutes || 0);
-      if (totalMinutes < 0) totalMinutes += 24 * 60; // Handle time crossing midnight
-      
-      const totalHours = totalMinutes / 60;
-      
-      // For MVP, apply anything over 8 hours as overtime
-      // In a real implementation, this would track weekly hours per employee
-      regHours = Math.min(8, totalHours);
-      otHours = Math.max(0, totalHours - 8);
-    }
-    
-    // Get all hours types
-    const ptoHours = punch.pto_hours || 0;
-    const holidayWorkedHours = punch.holiday_worked_hours || 0;
-    const holidayNonWorkedHours = punch.holiday_non_worked_hours || 0;
-    const miscHours = punch.misc_hours || 0;
-    
-    // Calculate pay for each type of hours
+    // Get the punch to calculate payroll for
+    const [punch] = await db.select().from(punches).where(eq(punches.id, punch_id));
+    if (!punch) throw new Error("Punch not found");
+
+    // Get employee to get hourly rate
+    const [employee] = await db.select().from(employees).where(eq(employees.id, punch.employee_id));
+    if (!employee) throw new Error("Employee not found");
+
+    // Get company settings
+    const [otThresholdSetting] = await db.select().from(settings)
+      .where(and(eq(settings.company_id, employee.company_id), eq(settings.key, "ot_threshold")));
+    const [mileageRateSetting] = await db.select().from(settings)
+      .where(and(eq(settings.company_id, employee.company_id), eq(settings.key, "mileage_rate")));
+
+    const otThreshold = otThresholdSetting ? parseFloat(otThresholdSetting.value) : 8;
+    const mileageRate = mileageRateSetting ? parseFloat(mileageRateSetting.value) : 0.67;
+
+    // Calculate hours worked
+    const timeIn = new Date(`1970-01-01T${punch.time_in}`);
+    const timeOut = new Date(`1970-01-01T${punch.time_out}`);
+    const totalMinutes = (timeOut.getTime() - timeIn.getTime()) / (1000 * 60);
+    const lunchMinutes = punch.lunch_minutes || 0;
+    const workedMinutes = totalMinutes - lunchMinutes;
+    const workedHours = workedMinutes / 60;
+
+    // Calculate regular and overtime hours
+    const regHours = Math.min(workedHours, otThreshold);
+    const otHours = Math.max(0, workedHours - otThreshold);
+
+    // Calculate pay components
     const regPay = regHours * employee.rate;
     const otPay = otHours * employee.rate * 1.5;
-    const ptoPay = ptoHours * employee.rate;
-    const holidayWorkedPay = holidayWorkedHours * employee.rate * holidayRateMultiplier;
-    const holidayNonWorkedPay = holidayNonWorkedHours * employee.rate;
-    const miscHoursPay = miscHours * employee.rate; // Assume regular rate for misc hours
-    
-    // Calculate reimbursements
+    const ptoPay = (punch.pto_hours || 0) * employee.rate;
+    const holidayWorkedPay = (punch.holiday_worked_hours || 0) * employee.rate * 1.5;
+    const holidayNonWorkedPay = (punch.holiday_non_worked_hours || 0) * employee.rate;
+    const miscHoursPay = (punch.misc_hours || 0) * employee.rate;
     const mileagePay = (punch.miles || 0) * mileageRate;
     const miscReimbursement = punch.misc_reimbursement || 0;
-    
-    // Calculate total pay
-    const hourlyPay = regPay + otPay + ptoPay + holidayWorkedPay + holidayNonWorkedPay + miscHoursPay;
-    const totalPay = hourlyPay + mileagePay + miscReimbursement;
-    
-    // Check for existing payroll calculation
-    let existing: PayrollCalc | undefined;
-    for (const calc of this.payroll_calcs.values()) {
-      if (calc.punch_id === punch_id) {
-        existing = calc;
-        break;
-      }
-    }
+
+    const totalPay = regPay + otPay + ptoPay + holidayWorkedPay + holidayNonWorkedPay + miscHoursPay + mileagePay + miscReimbursement;
+
+    const calcData: InsertPayrollCalc = {
+      punch_id,
+      reg_hours: regHours,
+      ot_hours: otHours,
+      reg_pay: regPay,
+      ot_pay: otPay,
+      pto_pay: ptoPay,
+      holiday_worked_pay: holidayWorkedPay,
+      holiday_non_worked_pay: holidayNonWorkedPay,
+      misc_hours_pay: miscHoursPay,
+      pay: regPay + otPay,
+      mileage_pay: mileagePay,
+      misc_reimbursement: miscReimbursement,
+      total_pay: totalPay
+    };
+
+    // Check if calculation already exists
+    const [existing] = await db.select().from(payroll_calcs).where(eq(payroll_calcs.punch_id, punch_id));
     
     if (existing) {
-      // Update existing
-      const updated: PayrollCalc = {
-        ...existing,
-        reg_hours: regHours,
-        ot_hours: otHours,
-        pto_hours: ptoHours,
-        holiday_worked_hours: holidayWorkedHours,
-        holiday_non_worked_hours: holidayNonWorkedHours,
-        misc_hours: miscHours,
-        reg_pay: regPay,
-        ot_pay: otPay,
-        pto_pay: ptoPay,
-        holiday_worked_pay: holidayWorkedPay,
-        holiday_non_worked_pay: holidayNonWorkedPay,
-        misc_hours_pay: miscHoursPay,
-        pay: hourlyPay,
-        mileage_pay: mileagePay,
-        misc_reimbursement: miscReimbursement,
-        total_pay: totalPay,
-        calculated_at: new Date()
-      };
-      this.payroll_calcs.set(existing.id, updated);
+      const [updated] = await db.update(payroll_calcs)
+        .set({ ...calcData, calculated_at: new Date() })
+        .where(eq(payroll_calcs.punch_id, punch_id))
+        .returning();
       return updated;
     } else {
-      // Create new
-      const id = this.payrollCalcId++;
-      const calc: PayrollCalc = {
-        id,
-        punch_id,
-        reg_hours: regHours,
-        ot_hours: otHours,
-        pto_hours: ptoHours,
-        holiday_worked_hours: holidayWorkedHours,
-        holiday_non_worked_hours: holidayNonWorkedHours,
-        misc_hours: miscHours,
-        reg_pay: regPay,
-        ot_pay: otPay,
-        pto_pay: ptoPay,
-        holiday_worked_pay: holidayWorkedPay,
-        holiday_non_worked_pay: holidayNonWorkedPay,
-        misc_hours_pay: miscHoursPay,
-        pay: hourlyPay,
-        mileage_pay: mileagePay,
-        misc_reimbursement: miscReimbursement,
-        total_pay: totalPay,
-        calculated_at: new Date()
-      };
-      this.payroll_calcs.set(id, calc);
-      return calc;
+      const [created] = await db.insert(payroll_calcs).values(calcData).returning();
+      return created;
     }
   }
 
-  async getPayrollReport(from_date: Date, to_date: Date): Promise<Array<Punch & { employee: Employee, payroll: PayrollCalc }>> {
-    // Get punches for the date range
-    const punches = await this.getPunches({ from_date, to_date });
-    
-    // Collect payroll data
-    const report: Array<Punch & { employee: Employee, payroll: PayrollCalc }> = [];
-    
-    for (const punch of punches) {
-      const employee = this.employees.get(punch.employee_id);
-      if (!employee) continue;
-      
-      // Find payroll calculation for this punch
-      let payroll: PayrollCalc | undefined;
-      for (const calc of this.payroll_calcs.values()) {
-        if (calc.punch_id === punch.id) {
-          payroll = calc;
-          break;
-        }
-      }
-      
-      if (!payroll) {
-        // Calculate on-the-fly if not found
-        payroll = await this.calculatePayroll(punch.id);
-      }
-      
-      report.push({
-        ...punch,
-        employee,
-        payroll
-      });
-    }
-    
-    return report;
-  }
 
-  // Audit log methods
-  async addAuditLog(insertLog: InsertAuditLog): Promise<AuditLog> {
-    const id = this.auditLogId++;
-    const log: AuditLog = {
-      ...insertLog,
-      id,
-      changed_at: new Date()
-    };
-    this.audit_logs.set(id, log);
-    return log;
+  async getPayrollForPeriod(company_id: number, from_date: Date, to_date: Date): Promise<any[]> {
+    const weekStartSetting = await this.getSetting(company_id, 'work_week_start_day');
+    const otSetting = await this.getSetting(company_id, 'ot_threshold');
+    const mileageRateSetting = await this.getSetting(company_id, 'mileage_rate');
+
+    const weekStartDay = parseInt(weekStartSetting?.value || '0', 10); // 0=Sunday
+    const otThreshold = parseFloat(otSetting?.value || '40');
+    const mileageRate = parseFloat(mileageRateSetting?.value || '0.30');
+
+    const rows = await db.select({ punch: punches, employee: employees })
+      .from(punches)
+      .innerJoin(employees, eq(punches.employee_id, employees.id))
+      .where(and(
+        eq(employees.company_id, company_id),
+        gte(punches.date, from_date.toISOString().split('T')[0]),
+        lte(punches.date, to_date.toISOString().split('T')[0])
+      ));
+
+    const weeklyBuckets = new Map<string, { employee: Employee; worked: number; pto: number; holidayW: number; holidayNW: number; misc: number; miles: number; reimb: number }>();
+
+    for (const row of rows) {
+      const { punch, employee } = row;
+      const dateObj = new Date(punch.date);
+      const diff = (dateObj.getDay() - weekStartDay + 7) % 7;
+      const weekStart = new Date(dateObj);
+      weekStart.setDate(dateObj.getDate() - diff);
+      weekStart.setHours(0,0,0,0);
+      const key = `${employee.id}-${weekStart.toISOString()}`;
+
+      const timeIn = punch.time_in ? new Date(`1970-01-01T${punch.time_in}`) : null;
+      const timeOut = punch.time_out ? new Date(`1970-01-01T${punch.time_out}`) : null;
+      let workedHours = 0;
+      if (timeIn && timeOut) {
+        workedHours = (timeOut.getTime() - timeIn.getTime())/60000;
+        workedHours -= punch.lunch_minutes || 0;
+        workedHours = workedHours/60;
+      }
+
+      let bucket = weeklyBuckets.get(key);
+      if (!bucket) {
+        bucket = { employee, worked:0, pto:0, holidayW:0, holidayNW:0, misc:0, miles:0, reimb:0 };
+        weeklyBuckets.set(key, bucket);
+      }
+      bucket.worked += workedHours;
+      bucket.pto += punch.pto_hours || 0;
+      bucket.holidayW += punch.holiday_worked_hours || 0;
+      bucket.holidayNW += punch.holiday_non_worked_hours || 0;
+      bucket.misc += punch.misc_hours || 0;
+      bucket.miles += punch.miles || 0;
+      bucket.reimb += punch.misc_reimbursement || 0;
+    }
+
+    const totalsMap = new Map<number, any>();
+
+    for (const bucket of weeklyBuckets.values()) {
+      const emp = bucket.employee;
+      const regHours = Math.min(bucket.worked, otThreshold);
+      const otHours = Math.max(0, bucket.worked - otThreshold);
+      const regPay = regHours * emp.rate;
+      const otPay = otHours * emp.rate * 1.5;
+      const ptoPay = bucket.pto * emp.rate;
+      const holidayWorkedPay = bucket.holidayW * emp.rate * 1.5;
+      const holidayNonWorkedPay = bucket.holidayNW * emp.rate;
+      const miscPay = bucket.misc * emp.rate;
+      const mileagePay = bucket.miles * mileageRate;
+      const totalPay = regPay + otPay + ptoPay + holidayWorkedPay + holidayNonWorkedPay + miscPay + mileagePay + bucket.reimb;
+
+      let tot = totalsMap.get(emp.id);
+      if (!tot) {
+        tot = { employee: emp, reg_hours:0, ot_hours:0, pto_hours:0, holiday_worked_hours:0, holiday_non_worked_hours:0, misc_hours:0, reg_pay:0, ot_pay:0, pto_pay:0, holiday_worked_pay:0, holiday_non_worked_pay:0, misc_hours_pay:0, mileage_pay:0, misc_reimbursement:0, total_pay:0 };
+        totalsMap.set(emp.id, tot);
+      }
+      tot.reg_hours += regHours;
+      tot.ot_hours += otHours;
+      tot.pto_hours += bucket.pto;
+      tot.holiday_worked_hours += bucket.holidayW;
+      tot.holiday_non_worked_hours += bucket.holidayNW;
+      tot.misc_hours += bucket.misc;
+      tot.reg_pay += regPay;
+      tot.ot_pay += otPay;
+      tot.pto_pay += ptoPay;
+      tot.holiday_worked_pay += holidayWorkedPay;
+      tot.holiday_non_worked_pay += holidayNonWorkedPay;
+      tot.misc_hours_pay += miscPay;
+      tot.mileage_pay += mileagePay;
+      tot.misc_reimbursement += bucket.reimb;
+      tot.total_pay += totalPay;
+    }
+
+    return Array.from(totalsMap.values());
+  }
+  // Audit log operations
+  async addAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [newLog] = await db.insert(audit_logs).values(log).returning();
+    return newLog;
   }
 
   async getAuditLogs(filter?: { table_name?: string, row_id?: number }): Promise<AuditLog[]> {
-    let logs = Array.from(this.audit_logs.values());
-    
+    let query = db.select().from(audit_logs);
+
     if (filter?.table_name) {
-      logs = logs.filter(log => log.table_name === filter.table_name);
+      query = query.where(eq(audit_logs.table_name, filter.table_name));
     }
-    
-    if (filter?.row_id !== undefined) {
-      logs = logs.filter(log => log.row_id === filter.row_id);
+
+    if (filter?.row_id) {
+      query = query.where(eq(audit_logs.row_id, filter.row_id));
     }
-    
-    return logs;
+
+    return await query;
   }
 
-  // Settings methods
-  async getSetting(key: string): Promise<Setting | undefined> {
-    return this.settings.get(key);
+  // Settings operations
+  async getSetting(company_id: number, key: string): Promise<Setting | undefined> {
+    const [setting] = await db.select().from(settings)
+      .where(and(eq(settings.company_id, company_id), eq(settings.key, key)));
+    return setting || undefined;
   }
 
-  async updateSetting(key: string, value: string): Promise<Setting> {
-    const existing = this.settings.get(key);
-    
+  async updateSetting(company_id: number, key: string, value: string): Promise<Setting> {
+    const [existing] = await db.select().from(settings)
+      .where(and(eq(settings.company_id, company_id), eq(settings.key, key)));
+
     if (existing) {
-      const updated: Setting = {
-        ...existing,
-        value,
-        updated_at: new Date()
-      };
-      this.settings.set(key, updated);
+      const [updated] = await db.update(settings)
+        .set({ value, updated_at: new Date() })
+        .where(and(eq(settings.company_id, company_id), eq(settings.key, key)))
+        .returning();
       return updated;
     } else {
-      const id = this.settingId++;
-      const setting: Setting = {
-        id,
-        key,
-        value,
-        updated_at: new Date()
-      };
-      this.settings.set(key, setting);
-      return setting;
+      const [created] = await db.insert(settings)
+        .values({ company_id, key, value })
+        .returning();
+      return created;
     }
   }
 }
-
-import { MultiCompanyStorage } from "./multi-company-storage";
-import { DatabaseStorage } from "./db-storage";
-
-export const storage = new MultiCompanyStorage();
+export const storage = new Database();
